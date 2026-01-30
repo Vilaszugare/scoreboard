@@ -118,17 +118,12 @@ window.submitMatchSettings = async function () {
     console.log("Starting Match Settings Update...");
 
     // 1. GET THE HIDDEN DATABASE ID (The Target)
-    // Priority: URL Param -> Global Data Object
+    // We look at the URL (e.g., index.html?match_id=15) to know WHICH match row to update.
     const urlParams = new URLSearchParams(window.location.search);
-    let dbMatchId = urlParams.get('match_id');
-
-    if (!dbMatchId && window.currentMatchData && window.currentMatchData.id) {
-        dbMatchId = window.currentMatchData.id;
-        console.log("Found Match ID from Global Data:", dbMatchId);
-    }
+    const dbMatchId = urlParams.get('match_id');
 
     if (!dbMatchId) {
-        alert("Critical Error: Cannot find Match ID. Please refresh the page.");
+        alert("Critical Error: Cannot find Match ID in URL. Please refresh the page.");
         return;
     }
 
@@ -137,31 +132,23 @@ window.submitMatchSettings = async function () {
     const newOvers = parseInt(document.getElementById('ms-overs').value);
     const newBallsPerOver = parseInt(document.getElementById('ms-balls-per-over').value);
     const newStatus = document.getElementById('ms-match-state').value;
-
-    // Validate Select Inputs (Handle potential NULLs)
-    let newTossWinner = parseInt(document.getElementById('ms-toss-winner').value);
-    let newBatFirst = parseInt(document.getElementById('ms-bat-first').value);
-
-    // Validation Safety Checks
-    if (isNaN(newMatchNo)) { alert("Match Number must be a valid number"); return; }
-    if (isNaN(newOvers)) { alert("Overs must be a valid number"); return; }
-    if (isNaN(newTossWinner)) newTossWinner = null; // or handle as error
-    if (isNaN(newBatFirst)) newBatFirst = null;
+    const newTossWinner = parseInt(document.getElementById('ms-toss-winner').value);
+    const newBatFirst = document.getElementById('ms-bat-first').value; // Might be disabled, but .value still works
 
     // 3. PREPARE THE DATA PACKAGE
     const payload = {
-        match_number: newMatchNo,
+        match_number: newMatchNo,      // This updates the visible number (e.g. 1 -> 90)
         total_overs: newOvers,
         balls_per_over: newBallsPerOver,
         match_status: newStatus,
         toss_winner_id: newTossWinner,
-        batting_team_id: newBatFirst
+        batting_team_id: parseInt(newBatFirst)
     };
 
-    console.log(`Sending Payload to ID ${dbMatchId}:`, payload);
+    console.log("Sending Payload to ID " + dbMatchId, payload);
 
     try {
-        // 4. SEND TO BACKEND
+        // 4. SEND TO BACKEND (Using the ID to find the row)
         const res = await fetch(`${API_URL}/matches/${dbMatchId}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -172,25 +159,18 @@ window.submitMatchSettings = async function () {
             alert("✅ Match Settings Updated Successfully!");
             document.getElementById('matchSettingsModal').close();
 
-            // Refresh page to see changes
+            // Refresh page to see the new Match Number
             window.location.reload();
         } else {
             // Show detailed error if it fails
             const err = await res.json();
             console.error("Backend Error:", err);
-
-            let errMsg = "Unknown Error";
-            if (typeof err.detail === 'string') {
-                errMsg = err.detail;
-            } else if (typeof err.detail === 'object') {
-                errMsg = JSON.stringify(err.detail);
-            }
-
+            const errMsg = typeof err.detail === 'object' ? JSON.stringify(err.detail) : err.detail;
             alert("Update Failed:\n" + errMsg);
         }
     } catch (e) {
         console.error("Network Error:", e);
-        alert("Error connecting to server. Check console for details.\n" + e.message);
+        alert("Error connecting to server. Check console for details.");
     }
 }
 

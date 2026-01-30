@@ -838,8 +838,8 @@ async def update_match_settings(match_id: int, settings: MatchSettingsUpdate):
         
         await conn.execute("""
             UPDATE matches 
-            SET id = $1, 
-                match_number = $1, -- Also sync match_number column 
+            SET id = CAST($1 AS BIGINT), 
+                match_number = CAST($1 AS INTEGER), -- Also sync match_number column 
                 total_overs = $2,
                 match_type = $3, -- Mapped from settings.match_status
                 toss_winner_id = $4,
