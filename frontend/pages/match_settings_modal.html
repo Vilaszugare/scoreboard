@@ -1,0 +1,73 @@
+<dialog id="matchSettingsModal" class="modal-dark"
+    style="padding: 0; border: none; border-radius: 8px; width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+
+    <div
+        style="background: #1a237e; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #0d47a1;">
+        <h3 style="margin: 0; font-size: 18px; font-weight: 500;">Update Live Match Settings</h3>
+        <button onclick="document.getElementById('matchSettingsModal').close()"
+            style="background:none; border:none; color:white; font-size: 24px; cursor:pointer; opacity: 0.8;">&times;</button>
+    </div>
+
+    <div style="background: #b71c1c; padding: 25px 30px; display: flex; flex-direction: column; gap: 15px;">
+
+        <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+            <label style="color: white; font-size: 15px;">Match Number :</label>
+            <input type="number" id="ms-match-no"
+                style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; text-align: center;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 160px 1fr auto auto; align-items: center; gap: 10px;">
+            <label style="color: white; font-size: 15px;">Overs :</label>
+            <input type="number" id="ms-overs" value="10"
+                style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; text-align: center; width: 100%;">
+            <button onclick="adjustSettingValue('ms-overs', 1)"
+                style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
+            <button onclick="adjustSettingValue('ms-overs', -1)"
+                style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 160px 1fr auto auto; align-items: center; gap: 10px;">
+            <label style="color: white; font-size: 15px;">Balls Per Over :</label>
+            <input type="number" id="ms-balls-per-over" value="6"
+                style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; text-align: center; width: 100%;">
+            <button onclick="adjustSettingValue('ms-balls-per-over', 1)"
+                style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
+            <button onclick="adjustSettingValue('ms-balls-per-over', -1)"
+                style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+            <label style="color: white; font-size: 15px;">Match State :</label>
+            <input type="text" id="ms-match-state" value="Group Match"
+                style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+            <label style="color: white; font-size: 15px;">Toss Winner Team :</label>
+            <select id="ms-toss-winner"
+                style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px;">
+            </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+            <label style="color: white; font-size: 15px;">Bat First Team :</label>
+            <select id="ms-bat-first"
+                style="background: #5d4037; border: 1px solid #444; color: #bbb; padding: 8px; border-radius: 4px;">
+            </select>
+        </div>
+
+    </div>
+
+    <div
+        style="background: #1a237e; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #0d47a1;">
+        <button onclick="deleteMatchAction()"
+            style="background: #d32f2f; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+            🗑️ Delete Match
+        </button>
+
+        <button onclick="submitMatchSettings()"
+            style="background: #e53935; color: white; border: none; padding: 8px 25px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">
+            Update
+        </button>
+    </div>
+</dialog>

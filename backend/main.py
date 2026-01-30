@@ -4,8 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
 import os
-from .database import init_db, close_db
-from .routes import matches, scoring, teams
+from database import init_db, close_db
+from routes import matches, scoring, teams
+from routes.buttons import undo
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,10 +31,21 @@ app.add_middleware(
 app.include_router(matches.router, prefix="/api", tags=["Matches"])
 app.include_router(scoring.router, prefix="/api", tags=["Scoring"])
 app.include_router(teams.router, prefix="/api", tags=["Teams"])
+app.include_router(undo.router, prefix="/api", tags=["Buttons"])
+
+# Import players router inside to avoid circular imports layout if any, or just at top
+from routes import players, commentary
+app.include_router(players.router, prefix="/api", tags=["Players"])
+app.include_router(commentary.router, prefix="/api", tags=["Commentary"])
 
 # --- Serve Static Files ---
 # 1. Mount /static for assets (CSS, JS, Images)
-static_path = os.path.join(os.getcwd(), "frontend/static")
+# Determine the base directory (backend/) and the project root
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
+
+# 1. Mount /static for assets (CSS, JS, Images)
+static_path = os.path.join(FRONTEND_DIR, "static")
 if os.path.exists(static_path):
     app.mount("/static", StaticFiles(directory=static_path), name="static")
 else:
@@ -41,7 +53,7 @@ else:
 
 # 2. Mount / (root) to frontend/pages for HTML files
 # This must be the last mount as it catches all root requests
-pages_path = os.path.join(os.getcwd(), "frontend/pages")
+pages_path = os.path.join(FRONTEND_DIR, "pages")
 if os.path.exists(pages_path):
     app.mount("/", StaticFiles(directory=pages_path, html=True), name="pages")
 else:

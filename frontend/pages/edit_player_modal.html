@@ -1,0 +1,58 @@
+<dialog id="editPlayerModal" class="ep-modal-root" onclose="window.submitEditPlayer(true)">
+    <!-- Header -->
+    <div class="ep-header">
+        <h2 id="ep-player-name-title">Player Name</h2>
+        <button class="ep-close-btn" onclick="document.getElementById('editPlayerModal').close()">✖</button>
+    </div>
+
+    <!-- Body (Red) -->
+    <div class="ep-body">
+
+        <!-- Info Box (Black) -->
+        <div class="ep-black-box">
+            <div class="ep-input-row">
+                <label>Player Name :</label>
+                <input type="text" id="edit_player_name" class="ep-input" onblur="window.submitEditPlayer(true)"
+                    onchange="window.submitEditPlayer(true)">
+                <input type="hidden" id="edit_player_id">
+            </div>
+            <div class="ep-input-row">
+                <label>Role :</label>
+                <select id="edit_player_role" class="ep-input"
+                    style="width: 100%; background: #222; border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; cursor: pointer;"
+                    onblur="window.submitEditPlayer(true)" onchange="window.submitEditPlayer(true)">
+                    <option value="Batsman">Batsman</option>
+                    <option value="Bowler">Bowler</option>
+                    <option value="All-Rounder">All-Rounder</option>
+                    <option value="Wicket-Keeper">Wicket-Keeper</option>
+                </select>
+                <button class="ep-btn-update" id="btnUpdatePlayerInfo">Update</button>
+            </div>
+        </div>
+
+        <!-- Photo Box (Black) -->
+        <div class="ep-black-box photo-box-layout">
+
+            <div class="ep-photo-wrapper">
+                <div class="ep-photo-container">
+                    <img id="edit_player_photo_img" src=""
+                        style="width:100%; height:100%; object-fit:cover; display:none;" />
+                </div>
+                <!-- Trash Icon -->
+                <div class="ep-trash-icon" title="Remove Photo">🗑</div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <input type="text" id="edit_player_photo_url" class="ep-input" placeholder="Photo URL"
+                    style="display:none;"> <!-- Hidden or shown? Image implies upload button handles it -->
+                <button class="ep-btn-upload" id="btnUploadPhoto">Upload Photo</button>
+            </div>
+        </div>
+
+        <!-- Footer / Delete -->
+        <div class="ep-footer">
+            <button class="ep-btn-delete-player" id="btnDeletePlayer">🗑 Delete Player</button>
+        </div>
+
+    </div>
+</dialog>

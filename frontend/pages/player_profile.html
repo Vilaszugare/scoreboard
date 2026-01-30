@@ -1,0 +1,100 @@
+<dialog id="playerProfileModal" class="profile-modal">
+    <div class="profile-header-strip">
+        <span id="pp_header_name" class="pp-title">Player Name</span>
+        <button class="pp-close-btn" onclick="document.getElementById('playerProfileModal').close()">✖</button>
+    </div>
+
+    <div class="profile-red-body">
+        <!-- Top Section: Avatar & Basic Info -->
+        <div class="pp-top-section">
+            <div class="pp-avatar-container">
+                <img id="pp_avatar" src="../static/images/player_placeholder.png" alt="Player" class="pp-avatar">
+            </div>
+
+            <div class="pp-info-container">
+                <button class="pp-edit-btn">📝 Edit Player</button>
+                <div class="pp-info-row">
+                    <span class="pp-label">Role :</span>
+                    <span id="pp_role" class="pp-value">Batsman</span>
+                </div>
+                <div class="pp-info-row">
+                    <span class="pp-label">Team :</span>
+                    <span id="pp_team" class="pp-value">Team Name</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 1: This Match Batting -->
+        <div class="pp-stats-card">
+            <div class="pp-card-header">
+                <div class="flex-center">
+                    <span class="pp-icon">🏏</span>
+                    <span>This Match Batting</span>
+                    <button class="pp-badge-btn ml-2">Show</button>
+                </div>
+                <button class="pp-edit-red-btn">📝 Edit Batting Inng</button>
+            </div>
+            <table class="pp-table">
+                <thead>
+                    <tr>
+                        <th>Runs</th>
+                        <th>Balls</th>
+                        <th>4s</th>
+                        <th>6s</th>
+                        <th>SR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td id="pp_cur_runs">0</td>
+                        <td id="pp_cur_balls">0</td>
+                        <td id="pp_cur_4s">0</td>
+                        <td id="pp_cur_6s">0</td>
+                        <td id="pp_cur_sr">0.00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Section 2: Career Stats -->
+        <div class="pp-stats-card">
+            <div class="pp-card-header">
+                <div class="flex-center">
+                    <span class="pp-icon">🏏</span>
+                    <span>Batting Career (Tournament)</span>
+                    <button class="pp-badge-btn ml-2">Show Hz</button>
+                    <button class="pp-badge-btn ml-2">Show Vt</button>
+                </div>
+            </div>
+            <table class="pp-table">
+                <thead>
+                    <tr>
+                        <th>Mat</th>
+                        <th>Inng</th>
+                        <th>Runs</th>
+                        <th>Balls</th>
+                        <th>4s</th>
+                        <th>6s</th>
+                        <th>Best</th>
+                        <th>SR</th>
+                        <th>Avg</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td id="pp_car_mat">0</td>
+                        <td id="pp_car_inng">0</td>
+                        <td id="pp_car_runs">0</td>
+                        <td id="pp_car_balls">0</td>
+                        <td id="pp_car_4s">0</td>
+                        <td id="pp_car_6s">0</td>
+                        <td id="pp_car_best">0</td>
+                        <td id="pp_car_sr">0.00</td>
+                        <td id="pp_car_avg">0.00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</dialog>

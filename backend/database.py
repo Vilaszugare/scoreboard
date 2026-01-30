@@ -11,7 +11,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     # Fallback to direct string if env not set (for development continuity only - not best practice)
-    DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres"
+    DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5432/postgres"
     print("Warning: DATABASE_URL not found in .env, using fallback.")
 
 db_pool = None

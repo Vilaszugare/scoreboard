@@ -2,9 +2,14 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import asyncpg
-from . import database
+import database
 
 # --- Pydantic Models ---
+class CreateMatchRequest(BaseModel):
+    batting_team_id: int
+    bowling_team_id: int
+    total_overs: int
+
 class ScoreUpdate(BaseModel):
     match_id: int
     action: str 
@@ -26,8 +31,7 @@ class SimpleMatchRequest(BaseModel):
 
 class EndMatchRequest(BaseModel):
     match_id: int
-    winner_id: int
-    result: str
+    forced_winner_id: Optional[int] = None
 
 # --- Helper Functions ---
 def get_strike_rate(runs, balls):

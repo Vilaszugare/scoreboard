@@ -1,9 +1,10 @@
 from fastapi import APIRouter
-from .. import database
-from ..common import (
+import database
+from common import (
     fetch_match_state, build_match_response, fetch_player, swap_strikers, check_over_completion,
-    SimpleMatchRequest, ScoreUpdate, NewBatsmanRequest
+    SimpleMatchRequest, ScoreUpdate, NewBatsmanRequest, EndMatchRequest
 )
+from .matches import fetch_full_match_state
 
 router = APIRouter()
 
@@ -56,110 +57,7 @@ async def end_inning(payload: SimpleMatchRequest):
         print(f"Error ending inning: {e}")
         return {"status": "error", "message": str(e)}
 
-@router.post("/undo_last_action")
-async def undo_last_action(payload: SimpleMatchRequest):
-    try:
-        async with database.db_pool.acquire() as conn:
-            async with conn.transaction():
-                match_id = payload.match_id
-                # 1. Fetch Last Ball
-                ball = await conn.fetchrow("""
-                    SELECT * FROM balls WHERE match_id = $1 ORDER BY id DESC LIMIT 1
-                """, match_id)
-                if not ball:
-                    return {"status": "error", "message": "No actions to undo"}
-                
-                ball_id = ball['id']
-                striker_id = ball['striker_id']
-                runs_bat = ball['runs_off_bat']
-                extras = ball['extras']
-                extra_type = ball['extra_type']
-                is_wicket = ball['is_wicket']
-                is_four = ball['is_four']
-                is_six = ball['is_six']
-                ball_no = ball['ball_no']
-                action_type = ball['action_type']
-                
-                # 2. Revert Match Score
-                total_runs = runs_bat + extras
-                if total_runs != 0:
-                     await conn.execute("UPDATE matches SET team_score = team_score - $1 WHERE id = $2", total_runs, match_id)
 
-                # 3. Revert Match Balls/Overs
-                is_legal_ball = True
-                if action_type in ['wide', 'noball', 'penalty']:
-                    is_legal_ball = False
-                    
-                match = await fetch_match_state(conn, match_id)
-                current_balls = match['balls']
-                current_overs = match['overs']
-                
-                if is_legal_ball:
-                    if current_balls > 0:
-                        await conn.execute("UPDATE matches SET balls = balls - 1 WHERE id = $1", match_id)
-                    else:
-                        if ball_no == 6 and current_overs > 0:
-                            await conn.execute("UPDATE matches SET overs = overs - 1, balls = 5 WHERE id = $1", match_id)
-                            await swap_strikers(conn, match, match_id) 
-
-                # 4. Revert Player Stats
-                if action_type != 'penalty':
-                    batter_balls_sub = 1 if is_legal_ball or action_type in ['noball', 'wicket'] or action_type in ['bye', 'leg-bye'] else 0
-                    
-                    if action_type == 'wide': batter_balls_sub = 0
-                    elif action_type == 'noball': batter_balls_sub = 1
-                    elif is_legal_ball: batter_balls_sub = 1
-                    
-                    if runs_bat > 0 or batter_balls_sub > 0:
-                         await conn.execute("""
-                            UPDATE players 
-                            SET runs = runs - $1, balls = balls - $2
-                            WHERE id = $3
-                        """, runs_bat, batter_balls_sub, striker_id)
-                    
-                    if is_four:
-                         await conn.execute("UPDATE players SET fours = fours - 1 WHERE id = $1", striker_id)
-                    if is_six:
-                         await conn.execute("UPDATE players SET sixes = sixes - 1 WHERE id = $1", striker_id)
-
-                # 5. Revert Wicket
-                if is_wicket:
-                    player_out_id = striker_id 
-                    wicket_info = await conn.fetchrow("SELECT player_out_id FROM wickets WHERE ball_id = $1", ball_id)
-                    if wicket_info:
-                         player_out_id = wicket_info['player_out_id']
-                    
-                    await conn.execute("UPDATE players SET is_out = FALSE WHERE id = $1", player_out_id)
-                    await conn.execute("UPDATE matches SET wickets = wickets - 1 WHERE id = $1", match_id)
-                    
-                    if player_out_id == striker_id:
-                         await conn.execute("UPDATE matches SET current_striker_id = $1 WHERE id = $2", player_out_id, match_id)
-                    else:
-                         await conn.execute("UPDATE matches SET non_striker_id = $1 WHERE id = $2", player_out_id, match_id)
-
-                    await conn.execute("DELETE FROM wickets WHERE ball_id = $1", ball_id)
-
-                # 6. Swap Reversal (If not over change)
-                must_swap = False
-                if action_type != 'penalty':
-                    run_check = runs_bat
-                    if action_type in ['bye', 'leg-bye']: run_check = extras
-                    if action_type == 'noball': run_check = int(runs_bat)
-                    
-                    if run_check % 2 != 0:
-                        must_swap = True
-                
-                if must_swap:
-                     await swap_strikers(conn, match, match_id) 
-
-                # 7. Delete Ball
-                await conn.execute("DELETE FROM balls WHERE id = $1", ball_id)
-                
-                return {"status": "success", "message": f"Undid ball {ball_id}", "data": await build_match_response(conn, match_id)}
-                
-    except Exception as e:
-        print(f"Undo Error: {e}")
-        return {"status": "error", "message": str(e)}
 
 @router.post("/update_score")
 async def update_score(payload: ScoreUpdate):
@@ -247,8 +145,14 @@ async def update_score(payload: ScoreUpdate):
                     await conn.execute("UPDATE matches SET wickets = wickets + 1 WHERE id = $1", match_id)
                     await conn.execute("UPDATE players SET is_out = TRUE WHERE id = $1", striker_id)
                     
-                    if current_wickets >= 10: return {"status": "innings_over", "message": "All Out!", "data": await build_match_response(conn, match_id)}
-                    return {"status": "wicket_fall", "out_player": striker_out_name, "data": await build_match_response(conn, match_id)}
+                    # CRITICAL FIX: Vacate the crease
+                    if striker_id == match['current_striker_id']:
+                        await conn.execute("UPDATE matches SET current_striker_id = NULL WHERE id = $1", match_id)
+                    elif striker_id == match['non_striker_id']:
+                        await conn.execute("UPDATE matches SET non_striker_id = NULL WHERE id = $1", match_id)
+
+                    if current_wickets >= 10: return {"status": "innings_over", "message": "All Out!", "data": await fetch_full_match_state(conn, match_id)}
+                    return {"status": "wicket_fall", "out_player": striker_out_name, "data": await fetch_full_match_state(conn, match_id)}
 
                 must_swap = False
                 if action != 'penalty':
@@ -262,9 +166,9 @@ async def update_score(payload: ScoreUpdate):
                 fresh_match = await fetch_match_state(conn, match_id)
                 await check_over_completion(conn, fresh_match, match_id)
                 if fresh_match['balls'] >= 6 or (match['overs'] != fresh_match['overs']):
-                     return {"status": "over_complete", "message": "Over Complete", "data": await build_match_response(conn, match_id)}
+                     return {"status": "over_complete", "message": "Over Complete", "data": await fetch_full_match_state(conn, match_id)}
 
-            return {"status": "success", "data": await build_match_response(conn, match_id)}
+            return {"status": "success", "data": await fetch_full_match_state(conn, match_id)}
     except Exception as e:
         print(f"Error: {e}")
         return {"status": "error", "message": str(e)}
@@ -279,7 +183,7 @@ async def set_new_batsman(payload: NewBatsmanRequest):
                 column = "non_striker_id"
                 
             await conn.execute(f"UPDATE matches SET {column} = $1 WHERE id = $2", payload.new_player_id, match_id)
-            return await build_match_response(conn, match_id)
+            return await fetch_full_match_state(conn, match_id)
     except Exception as e:
         print(f"Error setting batsman: {e}")
         return {"error": str(e)}
@@ -294,7 +198,108 @@ async def set_bowler(payload: NewBatsmanRequest):
                 SET current_bowler_id = $1 
                 WHERE id = $2
             """, payload.new_player_id, match_id)
-            return await build_match_response(conn, match_id)
+
+            return await fetch_full_match_state(conn, match_id)
     except Exception as e:
         print(f"Error setting bowler: {e}")
         return {"error": str(e)}
+
+@router.post("/end_match")
+async def end_match(payload: EndMatchRequest):
+    try:
+        async with database.db_pool.acquire() as conn:
+            async with conn.transaction():
+                match_id = payload.match_id
+                
+                # 1. Fetch Request Data
+                match = await fetch_match_state(conn, match_id)
+                if not match: return {"status": "error", "message": "Match not found"}
+
+                team_score = match.get('team_score', 0)
+                wickets = match.get('wickets', 0)
+                target_score = match.get('target_score') 
+                target_score = int(target_score) if target_score is not None else 0
+                
+                total_overs = match.get('total_overs', 0)
+                overs = match.get('overs', 0)
+                balls = match.get('balls', 0)
+                
+                batting_team_id = match.get('team_batting_id')
+                bowling_team_id = match.get('team_bowling_id')
+                team_name_batting = match.get('team_name_batting')
+                team_name_bowling = match.get('team_name_bowling')
+
+                # Re-calculate IDs if missing (backup)
+                if not batting_team_id or not bowling_team_id:
+                     # This logic relies on build_match_response commonly, but here we iterate
+                     # If we are in inning 2, we can infer from Toss if available, or just use existing columns if valid
+                     # Note: match['team_batting_id'] might not exist as a column, it's dynamic?
+                     # Step 144: fetch_match_state returns RAW ROW.
+                     # Matches table usually has team_name_batting/bowling but maybe not IDs directly?
+                     # Let's trust logic Step 144: lines 163-185 calculate it dynamically.
+                     # We must replicate that or fetch it properly.
+                     batting_team_id = None
+                     bowling_team_id = None
+                     if match.get('toss_winner_id'):
+                        winner_id = match['toss_winner_id']
+                        loser_id = match['team_b_id'] if winner_id == match['team_a_id'] else match['team_a_id']
+                        first_bat = winner_id if match['toss_decision'] == 'bat' else loser_id
+                        first_bowl = loser_id if match['toss_decision'] == 'bat' else winner_id
+                        
+                        if match.get('current_inning', 1) == 2:
+                            batting_team_id = first_bowl
+                            bowling_team_id = first_bat
+                        else:
+                            batting_team_id = first_bat
+                            bowling_team_id = first_bowl
+
+                # 2. Calculate Valid Balls
+                total_balls_limit = total_overs * 6
+                current_balls = (overs * 6) + balls
+
+                # 3. Determine Winner (Referee Logic)
+                winner_id = None
+                result_message = "Match Ended Manually"
+
+                # Condition A: Batting Win
+                if team_score >= target_score and target_score > 0:
+                    winner_id = batting_team_id
+                    result_message = f"{team_name_batting} won by {10 - wickets} wickets"
+                
+                # Condition B: Bowling Win (Overs finished AND Score < Target-1)
+                elif (current_balls >= total_balls_limit or wickets >= 10) and team_score < (target_score - 1):
+                    # Note: target_score > 0 usually for 2nd inning
+                    winner_id = bowling_team_id
+                    runs_needed = (target_score - 1) - team_score # Or just Target - Score - 1 ?
+                    # User: "{Bowling Team} won by {target_score - team_score - 1} runs"
+                    margin = target_score - team_score - 1
+                    result_message = f"{team_name_bowling} won by {margin} runs"
+
+                # Condition C: Tie
+                elif (current_balls >= total_balls_limit or wickets >= 10) and team_score == (target_score - 1):
+                     winner_id = None
+                     result_message = "Match Tied"
+                
+                # Manual Override
+                if payload.forced_winner_id is not None:
+                     winner_id = payload.forced_winner_id
+                     result_message = "Match Awarded Manually"
+
+                # 4. DB Update
+                await conn.execute("""
+                    UPDATE matches 
+                    SET status = 'completed', 
+                        winner_id = $1, 
+                        result_message = $2 
+                    WHERE id = $3
+                """, winner_id, result_message, match_id)
+                
+                return {
+                    "status": "success", 
+                    "result": result_message, 
+                    "winner_id": winner_id
+                }
+                
+    except Exception as e:
+        print(f"Error ending match: {e}")
+        return {"status": "error", "message": str(e)}

@@ -161,6 +161,15 @@ console.log("Logic Script Loaded: v16 - Undo Enabled");
                         .then(r => r.json())
                         .then(d => refreshUI(d));
                 }
+            } else if (data.status === 'bowler_deselected') {
+                console.log("UNDO: Bowler Deselected. Re-opening modal.");
+                if (data.data) refreshUI(data.data);
+
+                // Requirement: "Refresh the UI so the 'Select Bowler' modal/dropdown reappears instantly."
+                setTimeout(() => {
+                    if (window.showSelectBowlerModal) window.showSelectBowlerModal();
+                }, 100); // Small delay to ensure UI updates first
+
             } else {
                 alert("Undo Failed: " + (data.message || "Unknown error"));
             }

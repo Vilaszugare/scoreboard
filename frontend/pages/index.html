@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Cricket Tournament Overlay</title>
     <link rel="stylesheet" href="../static/css/style.css">
+    <link rel="stylesheet" href="../static/css/commentary.css">
 </head>
 
 <body>
@@ -14,6 +15,16 @@
             <strong class="text-lg-bold">TESTING TOURNAMENT</strong>
             <span>🤠</span>
         </div>
+
+        <div class="match-info-center">
+            <span id="top_match_no">Match No. --</span>
+            <span class="sep">|</span>
+            <span id="top_match_overs">-- Overs</span>
+            <span class="sep">|</span>
+            <span id="top_match_type">--</span>
+            <button class="btn-settings-icon" onclick="openMatchSettingsModal()">⚙️</button>
+        </div>
+
         <div class="flex-row text-sm-flex">
             <span>Total Balance : <span class="text-neon-green">₹ 400</span></span>
             <div class="user-avatar-sm">D</div>
@@ -26,36 +37,78 @@
             <div class="flex-row">
                 <span class="text-section-header">Edit Matches</span>
                 <button class="btn-green-sm">Clear Screen</button>
+
+                <div style="display:none;"></div>
                 <button class="btn-green-sm">Tournament Name</button>
             </div>
             <div class="overlay-link-box text-gray-sm">
-                Overlay Link : <a href="#" class="text-blue-link">ndsports.in/...</a>
+                Overlay Link : <a href="#" class="text-blue-link">saurabhsalve.in/...</a>
             </div>
         </div>
 
-        <div class="match-header-box">
-            <div class="team-box-left">
-                <div class="text-team-header" id="header_team_name">Batting Team</div>
-                <div class="text-score-main">
-                    <span id="header_score">0/0</span>
-                    <span id="header_overs" class="text-overs-sub">(0.0 ov)</span>
+        <div class="match-header-box modern-glass">
+
+            <div id="target-display" class="target-pill-floating" style="display:none;">
+                Target: 0
+            </div>
+
+            <div class="team-card-modern">
+                <div class="team-color-box" id="teamA_color_box" title="Click to change color"
+                    style="cursor: pointer; position: relative;">
+                    <!-- Custom Picker Trigger -->
+                </div>
+
+                <div class="team-info-col">
+                    <div class="team-name-row">
+                        <span id="header_team_name" class="text-neon-blue">Batting Team</span>
+                        <span class="settings-icon-sm" onclick="window.openScoreModal('batting')"
+                            title="Edit Score">⚙️</span>
+                    </div>
+                    <div class="score-row-lg">
+                        <span id="header_score" class="score-main">0/0</span>
+                        <span id="header_overs" class="overs-sub">(0.0 ov)</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stat-pill">CRR: <span id="header_crr" style="color:#fff">0.0</span></span>
+                        <span class="stat-pill">Prj: <span id="header_proj" style="color:#fff">0</span></span>
+                    </div>
                 </div>
             </div>
-            <div class="vs-badge">VS</div>
-            <div id="target-display"
-                style="display:none; position:absolute; top:70px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.8); color:#fff; padding:4px 12px; border-radius:12px; font-size:14px; border:1px solid #444;">
+
+            <div class="vs-badge-modern">VS</div>
+
+            <div class="vs-logos-row">
+                <img id="header_batting_logo" src="../static/images/team_placeholder.png" class="team-logo-lg"
+                    alt="Logo">
+                <img id="header_bowling_logo" src="../static/images/team_placeholder.png" class="team-logo-lg"
+                    alt="Logo">
             </div>
-            <!-- FIXED RIGHT BOX WITH IDs -->
-            <div class="team-box-right">
-                <div class="text-team-header" id="header_bowling_name">Bowling Team</div>
-                <div id="header_bowling_score" style="font-size:22px; color:#ddd; font-weight:bold; height:28px;"></div>
-                <div class="team-color-row">Team Color <span class="team-color-swatch"></span></div>
+
+            <div class="team-card-modern reverse">
+                <div class="team-info-col">
+                    <div class="team-name-row">
+                        <span id="header_bowling_name" class="text-neon-blue">Bowling Team</span>
+                        <span class="settings-icon-sm" onclick="window.openScoreModal('bowling')"
+                            title="Edit Score">⚙️</span>
+                    </div>
+                    <div class="score-row-lg">
+                        <span id="header_bowling_score" class="score-main"></span>
+                    </div>
+                </div>
+
+                <div class="team-color-box" id="teamB_color_box" title="Click to change color"
+                    style="cursor: pointer; position: relative;">
+                    <!-- Custom Picker Trigger -->
+                </div>
             </div>
+
+
         </div>
 
         <div class="toss-banner">
             <!-- Dynamic Content -->
         </div>
+
 
         <div class="tab-bar">
             <button class="tab-btn active" onclick="switchTab('match')">Match Center</button>
@@ -63,6 +116,18 @@
             <button class="tab-btn" onclick="switchTab('scorecard')">Scorecard</button>
             <button class="tab-btn" onclick="switchTab('graph')">Graph /Charts</button>
             <button class="tab-btn" onclick="switchTab('commentary')">Commentary</button>
+
+            <!-- Zoom Widget (Right Aligned) -->
+            <div
+                style="display:flex; align-items:center; background:#222; border:1px solid #444; border-radius:6px; padding:4px 8px; margin-left:auto; margin-right:15px; height:32px; align-self:center;">
+                <span style="color:#888; font-size:12px; margin-right:8px;">🔍 Zoom</span>
+                <button onclick="changeZoom(-10)"
+                    style="background:none; border:none; color:#fff; cursor:pointer; font-size:16px; font-weight:bold; padding:0 5px;">−</button>
+                <span id="zoom-text"
+                    style="color:#00e5ff; font-weight:bold; font-size:13px; min-width:40px; text-align:center;">100%</span>
+                <button onclick="changeZoom(10)"
+                    style="background:none; border:none; color:#fff; cursor:pointer; font-size:16px; font-weight:bold; padding:0 5px;">+</button>
+            </div>
         </div>
 
         <div id="matchCenterPanel">
@@ -71,78 +136,94 @@
                     <div class="panel-box player-card-panel">
                         <div class="player-cards-container">
 
-                            <div class="player-card" id="p1-card">
-                                <div class="card-padding"
-                                    style="display:flex; justify-content:space-between; align-items:center;">
-                                    <span id="p1_name" class="text-white-bold-sm">Batsman 1</span>
-                                    <button onclick="window.changeBatsman('striker')"
-                                        class="btn-change-xs">Change</button>
-                                </div>
+                            <div class="player-column"
+                                style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:200px;">
+                                <div class="player-card" id="p1-card" style="width:100%; flex:1;">
+                                    <div class="card-padding"
+                                        style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span id="p1_name" class="text-white-bold-sm">Batsman 1</span>
+                                        <button onclick="window.changeBatsman('striker')"
+                                            class="btn-change-xs">Change</button>
+                                    </div>
 
-                                <div class="player-flex-layout">
-                                    <div class="avatar-circle"></div>
-                                    <div class="stats-content">
-                                        <div id="p1_score" class="score-highlight">0 <span>(0)</span></div>
+                                    <div class="player-flex-layout">
+                                        <div class="avatar-circle"></div>
+                                        <div class="stats-content">
+                                            <div id="p1_score" class="score-highlight">0 <span>(0)</span></div>
 
-                                        <div id="p1_stats" class="stats-detail-row">
-                                            4s: 0 &nbsp; 6s: 0 &nbsp; SR: 0.00
+                                            <div id="p1_stats" class="stats-detail-row">
+                                                4s: 0 &nbsp; 6s: 0 &nbsp; SR: 0.00
+                                            </div>
+
+                                            <button class="btn-profile btn-profile-auto">Profile</button>
                                         </div>
-
-                                        <button class="btn-profile btn-profile-auto">Profile</button>
                                     </div>
                                 </div>
+                                <div id="last-out-display" style="display:none;"></div>
                             </div>
 
                             <div class="swap-icon-row">
-                                <button class="btn-swap-circle">&#8646;</button>
+                                <button id="btn_rotate_strike" class="btn-swap-circle"
+                                    onclick="window.rotateStrike()">&#8646;</button>
                             </div>
 
-                            <div class="player-card" id="p2-card">
-                                <div class="card-padding"
-                                    style="display:flex; justify-content:space-between; align-items:center;">
-                                    <span id="p2_name" class="text-white-bold-sm">Batsman 2</span>
-                                    <button onclick="window.changeBatsman('non_striker')"
-                                        class="btn-change-xs">Change</button>
-                                </div>
+                            <div class="player-column"
+                                style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:200px;">
+                                <div class="player-card" id="p2-card" style="width:100%; flex:1;">
+                                    <div class="card-padding"
+                                        style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span id="p2_name" class="text-white-bold-sm">Batsman 2</span>
+                                        <button onclick="window.changeBatsman('non_striker')"
+                                            class="btn-change-xs">Change</button>
+                                    </div>
 
-                                <div class="player-flex-layout">
-                                    <div class="avatar-circle"></div>
+                                    <div class="player-flex-layout">
+                                        <div class="avatar-circle"></div>
 
-                                    <div class="stats-content">
-                                        <div id="p2_score" class="score-highlight text-white">0 <span>(0)</span></div>
+                                        <div class="stats-content">
+                                            <div id="p2_score" class="score-highlight text-white">0 <span>(0)</span>
+                                            </div>
 
-                                        <div id="p2_stats" class="stats-detail-row">
-                                            4s: 0 &nbsp; 6s: 0 &nbsp; SR: 0.00
+                                            <div id="p2_stats" class="stats-detail-row">
+                                                4s: 0 &nbsp; 6s: 0 &nbsp; SR: 0.00
+                                            </div>
+
+                                            <button class="btn-profile btn-profile-auto">Profile</button>
                                         </div>
-
-                                        <button class="btn-profile btn-profile-auto">Profile</button>
                                     </div>
                                 </div>
+                                <div id="p2-spacer" style="display:none;"></div>
                             </div>
 
-                            <div class="player-card bowler-card-wrapper" id="bowler-card">
-                                <div class="bowler-header-bg bowler-header-flex">
-                                    <span id="tv_bowler" class="text-white-bold-sm">Bowler Name</span>
-                                    <button onclick="window.showSelectBowlerModal()"
-                                        class="btn-change-xs">Change</button>
-                                </div>
+                            <div class="player-column"
+                                style="display:flex; flex-direction:column; gap:5px; flex:1; min-width:200px;">
+                                <div class="player-card bowler-card-wrapper" id="bowler-card"
+                                    style="width:100%; flex:1;">
+                                    <div class="bowler-header-bg bowler-header-flex">
+                                        <span id="tv_bowler" class="text-white-bold-sm">Bowler Name</span>
+                                        <button onclick="window.showSelectBowlerModal()"
+                                            class="btn-change-xs">Change</button>
+                                    </div>
 
-                                <div class="player-flex-layout">
-                                    <div class="avatar-circle"></div>
+                                    <div class="player-flex-layout">
+                                        <div class="avatar-circle"></div>
 
-                                    <div class="stats-content">
-                                        <div id="tv_curBo_score" class="score-highlight text-bowler-main">0.0 - 0 - 0 -
-                                            0</div>
+                                        <div class="stats-content">
+                                            <div id="tv_curBo_score" class="score-highlight text-bowler-main">0.0 - 0 -
+                                                0 -
+                                                0</div>
 
-                                        <div class="stats-detail-row">
-                                            Econ: <span id="tv_curBo_econ">0.00</span>
-                                            Dots: <span id="tv_curBo_dots">0</span>
-                                            Extras: <span id="tv_curBo_extras">0</span>
+                                            <div class="stats-detail-row">
+                                                Econ: <span id="tv_curBo_econ">0.00</span>
+                                                Dots: <span id="tv_curBo_dots">0</span>
+                                                Extras: <span id="tv_curBo_extras">0</span>
+                                            </div>
+
+                                            <button class="btn-profile btn-profile-red">Profile</button>
                                         </div>
-
-                                        <button class="btn-profile btn-profile-red">Profile</button>
                                     </div>
                                 </div>
+                                <div id="bowler-spacer" style="display:none;"></div>
                             </div>
                         </div>
 
@@ -153,7 +234,11 @@
                             </div>
 
                             <div class="part-group-sm">
-                                <span class="text-gray-label">This Over :</span>
+                                <!-- Ball container (Injected via JS) -->
+                                <div id="this_over_balls_container" class="balls-row">
+                                    <!-- Balls go here e.g. <span class="ball-badge">1</span> -->
+                                </div>
+                                <span class="text-gray-label" style="margin-left:10px;">This Over :</span>
                                 <span id="this_over_runs" class="text-white-bold">00 runs</span>
                             </div>
                         </div>
@@ -201,7 +286,7 @@
             </div>
 
             <div class="bottom-row">
-                <div class="bottom-panel">
+                <div class="bottom-panel" style="flex:0.8;">
                     <div class="panel-header">
                         <span>Lower Scoreboard</span>
                         <button class="btn-lower-score">Lower Scoreboard ></button>
@@ -224,7 +309,7 @@
                     </div>
                 </div>
 
-                <div class="bottom-panel">
+                <div class="bottom-panel" style="flex:0.8;">
                     <div class="panel-header">
                         <span>Theme Other Panels to show</span>
                         <button class="btn-clear-screen">Clear Screen</button>
@@ -239,13 +324,50 @@
                     </div>
                 </div>
 
-                <div class="bottom-panel flex-1-5">
-                    <div class="panel-header">
-                        <span>Team Squad Settings - Quick Edit</span>
-                    </div>
-                    <div class="bottom-panel-content">
-                        <div class="squad-columns">
-                            <!-- Helper section for quick edit, can remain -->
+                <div class="bottom-panel" style="flex:2.4;">
+                    <div class="bottom-panel-content" style="padding:0; overflow:hidden;">
+
+                        <div class="panel-header"
+                            style="background:#5c0000; color:white; border-bottom:1px solid #7a0000;">
+                            <span>Team Squad Settings - Quick Edit</span>
+                        </div>
+
+                        <div class="quick-edit-container">
+
+                            <div id="quick-squad-col-a" class="quick-team-col">
+                                <div class="quick-team-header" id="quick-team-name-a">Team A</div>
+
+                                <div class="quick-input-row">
+                                    <input type="text" id="input-add-a" class="quick-input"
+                                        placeholder="Enter player name">
+                                    <button onclick="quickAddPlayer('A')" class="btn-quick-add">Add Player</button>
+                                </div>
+
+                                <div class="quick-list-header">Team Squad : (<span id="count-a">0</span> selected)</div>
+
+                                <div id="list-squad-a" class="quick-list-container">
+                                    <div style="color:#666; font-size:12px; text-align:center; padding:10px;">Loading...
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="quick-squad-col-b" class="quick-team-col">
+                                <div class="quick-team-header" id="quick-team-name-b">Team B</div>
+
+                                <div class="quick-input-row">
+                                    <input type="text" id="input-add-b" class="quick-input"
+                                        placeholder="Enter player name">
+                                    <button onclick="quickAddPlayer('B')" class="btn-quick-add">Add Player</button>
+                                </div>
+
+                                <div class="quick-list-header">Team Squad : (<span id="count-b">0</span> selected)</div>
+
+                                <div id="list-squad-b" class="quick-list-container">
+                                    <div style="color:#666; font-size:12px; text-align:center; padding:10px;">Loading...
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -279,14 +401,85 @@
         </div>
 
         <!-- OTHER PANELS (Placeholders) -->
-        <div id="scorecardPanel" style="display:none; padding:20px;">
-            <h2 class="text-white-bold">Scorecard (Coming Soon)</h2>
+        <div id="scorecardPanel" style="display:none; padding:10px; color:white;">
+
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <button id="btn-sc-inn1" onclick="renderInningScorecard(1)" class="tab-btn active">1st Inning</button>
+                <button id="btn-sc-inn2" onclick="renderInningScorecard(2)" class="tab-btn">2nd Inning</button>
+            </div>
+
+            <div id="scorecard-container"
+                style="background:#111; border:1px solid #333; border-radius:8px; overflow:hidden;">
+
+                <div
+                    style="background:#d32f2f; color:white; padding:10px 15px; font-weight:bold; display:flex; justify-content:space-between;">
+                    <span>Batting Summary</span>
+                    <span id="sc-total-score">0-0 (0.0 ov)</span>
+                </div>
+
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+                        <thead>
+                            <tr style="background:#222; color:#aaa; text-align:left;">
+                                <th style="padding:8px;">Batsman</th>
+                                <th style="padding:8px;">Out Details</th>
+                                <th style="padding:8px; text-align:center;">R</th>
+                                <th style="padding:8px; text-align:center;">B</th>
+                                <th style="padding:8px; text-align:center;">4s</th>
+                                <th style="padding:8px; text-align:center;">6s</th>
+                                <th style="padding:8px; text-align:center;">SR</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sc-batting-body">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div
+                    style="background:#1a1a1a; padding:8px 15px; border-top:1px solid #333; border-bottom:1px solid #333; font-size:13px; color:#ddd;">
+                    <strong>Extras:</strong> <span id="sc-extras">0 (b 0, lb 0, w 0, nb 0, p 0)</span>
+                </div>
+
+                <div style="background:#d32f2f; color:white; padding:8px 15px; font-weight:bold; margin-top:0px;">
+                    Bowling Summary
+                </div>
+
+                <div style="overflow-x:auto;">
+                    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+                        <thead>
+                            <tr style="background:#222; color:#aaa; text-align:center;">
+                                <th style="padding:8px; text-align:left;">Bowler</th>
+                                <th style="padding:8px;">O</th>
+                                <th style="padding:8px;">M</th>
+                                <th style="padding:8px;">R</th>
+                                <th style="padding:8px;">W</th>
+                                <th style="padding:8px;">Econ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sc-bowling-body">
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
         </div>
         <div id="graphPanel" style="display:none; padding:20px;">
             <h2 class="text-white-bold">Graphs (Coming Soon)</h2>
         </div>
         <div id="commentaryPanel" style="display:none; padding:20px;">
-            <h2 class="text-white-bold">Commentary (Coming Soon)</h2>
+            <div class="panel-box" style="padding:15px; min-height:400px; background: #251e1e;">
+                <h2 class="text-white-bold" style="margin-bottom:15px;">Micro Commentary</h2>
+
+                <div class="comm-tabs">
+                    <button id="btnCommInn1" class="comm-tab active" onclick="window.switchCommInning(1)">1st
+                        Inning</button>
+                    <button id="btnCommInn2" class="comm-tab" onclick="window.switchCommInning(2)">2nd Inning</button>
+                </div>
+
+                <div id="commTimeline" class="comm-timeline">
+                    <div style="text-align:center; color:#888; padding:20px;">Loading Commentary...</div>
+                </div>
+            </div>
         </div>
 
         <dialog id="newBatsmanModal" class="modal-dark">
@@ -294,7 +487,11 @@
             <select id="newBatsmanSelect" class="select-full-width">
                 <option>Loading...</option>
             </select>
-            <button id="confirmBatsmanBtn" class="btn-confirm-blue">Confirm</button>
+            <div class="modal-footer" style="margin-top: 15px; display: flex; gap: 10px;">
+                <button id="confirmBatsmanBtn" class="btn-confirm-blue">Confirm</button>
+                <button id="cancelBatsmanBtn" class="btn-cancel-gray"
+                    onclick="document.getElementById('newBatsmanModal').close()">Cancel</button>
+            </div>
         </dialog>
 
         <dialog id="selectBowlerModal" class="modal-dark">
@@ -307,7 +504,131 @@
                 class="btn-cancel-gray">Cancel</button>
         </dialog>
 
+        <!-- New Manual Score Override Modal -->
+        <dialog id="scoreOverrideModal" class="modal-dark modal-red-border" style="min-width: 400px;">
+            <h3 id="overrideModalTitle" style="border-bottom: 1px solid #555; padding-bottom: 10px;">Edit Score</h3>
+
+            <div class="adjustment-row">
+                <span>Total Score :</span>
+                <div class="flex-row">
+                    <input type="number" id="adj_score" class="adj-input" readonly>
+                    <button class="btn-adj btn-plus" onclick="adjustValue('adj_score', 1)">+</button>
+                    <button class="btn-adj btn-minus" onclick="adjustValue('adj_score', -1)">-</button>
+                </div>
+            </div>
+
+            <div class="adjustment-row">
+                <span>Total Wickets :</span>
+                <div class="flex-row">
+                    <input type="number" id="adj_wickets" class="adj-input" readonly max="10" min="0">
+                    <button class="btn-adj btn-plus" onclick="adjustValue('adj_wickets', 1)">+</button>
+                    <button class="btn-adj btn-minus" onclick="adjustValue('adj_wickets', -1)">-</button>
+                </div>
+            </div>
+
+            <div class="adjustment-row">
+                <span>Total Overs :</span>
+                <div class="flex-row">
+                    <input type="text" id="adj_overs" class="adj-input" readonly>
+                    <button class="btn-adj btn-plus" onclick="adjustValue('adj_overs', 1)">+</button>
+                    <button class="btn-adj btn-minus" onclick="adjustValue('adj_overs', -1)">-</button>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="updateScoreBtn" class="btn-confirm-red" style="width: 100%;"
+                    onclick="submitScoreOverride()">Update</button>
+                <button class="btn-cancel-gray"
+                    onclick="document.getElementById('scoreOverrideModal').close()">Cancel</button>
+            </div>
+        </dialog>
+
     </div>
+    <!-- Custom Color Picker Modal -->
+    <div id="customColorPicker" class="color-picker-popup" style="display: none;">
+        <div class="color-options-grid" id="colorOptionsGrid">
+            <!-- Injected by JS -->
+        </div>
+    </div>
+
+    <!-- MATCH SETTINGS MODAL (INJECTED) -->
+    <dialog id="matchSettingsModal" class="modal-dark"
+        style="padding: 0; border: none; border-radius: 8px; width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+
+        <div
+            style="background: #1a237e; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #0d47a1;">
+            <h3 style="margin: 0; font-size: 18px; font-weight: 500;">Update Live Match Settings</h3>
+            <button onclick="document.getElementById('matchSettingsModal').close()"
+                style="background:none; border:none; color:white; font-size: 24px; cursor:pointer; opacity: 0.8;">&times;</button>
+        </div>
+
+        <div style="background: #b71c1c; padding: 25px 30px; display: flex; flex-direction: column; gap: 15px;">
+
+            <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+                <label style="color: white; font-size: 15px;">Match Number :</label>
+                <input type="number" id="ms-match-no"
+                    style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; text-align: center;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 160px 1fr auto auto; align-items: center; gap: 10px;">
+                <label style="color: white; font-size: 15px;">Overs :</label>
+                <input type="number" id="ms-overs" value="10"
+                    style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; text-align: center; width: 100%;">
+                <button onclick="adjustSettingValue('ms-overs', 1)"
+                    style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
+                <button onclick="adjustSettingValue('ms-overs', -1)"
+                    style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 160px 1fr auto auto; align-items: center; gap: 10px;">
+                <label style="color: white; font-size: 15px;">Balls Per Over :</label>
+                <input type="number" id="ms-balls-per-over" value="6"
+                    style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; text-align: center; width: 100%;">
+                <button onclick="adjustSettingValue('ms-balls-per-over', 1)"
+                    style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">+</button>
+                <button onclick="adjustSettingValue('ms-balls-per-over', -1)"
+                    style="background: #e53935; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-weight: bold;">-</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+                <label style="color: white; font-size: 15px;">Match State :</label>
+                <input type="text" id="ms-match-state" value="Group Match"
+                    style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+                <label style="color: white; font-size: 15px;">Toss Winner Team :</label>
+                <select id="ms-toss-winner"
+                    style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px;">
+                </select>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
+                <label style="color: white; font-size: 15px;">Bat First Team :</label>
+                <select id="ms-bat-first"
+                    style="background: #5d4037; border: 1px solid #444; color: #bbb; padding: 8px; border-radius: 4px;">
+                </select>
+            </div>
+
+        </div>
+
+        <div
+            style="background: #1a237e; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #0d47a1;">
+            <button onclick="deleteMatchAction()"
+                style="background: #d32f2f; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                🗑️ Delete Match
+            </button>
+
+            <button onclick="submitMatchSettings()"
+                style="background: #e53935; color: white; border: none; padding: 8px 25px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 14px;">
+                Update
+            </button>
+        </div>
+    </dialog>
+
+    <script src="../static/js/match_settings.js"></script>
+
+
     <script type="module" src="../static/js/main.js" defer></script>
 </body>
 

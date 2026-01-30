@@ -95,3 +95,70 @@ export async function saveSquadToBackend(teamId, playerIds) {
         throw e;
     }
 }
+export async function endMatch(matchId) {
+    try {
+        const response = await fetch(`${API_URL}/end_match`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ match_id: matchId })
+        });
+        return await response.json();
+    } catch (e) {
+        console.error("End Match Error:", e);
+        return { status: "error", message: e.message };
+    }
+}
+
+export async function rotateStrike(matchId) {
+    try {
+        const res = await fetch(`${API_URL}/matches/${matchId}/rotate_strike`, {
+            method: 'POST'
+        });
+        return await res.json();
+    } catch (e) {
+        console.error("Error rotating strike:", e);
+    }
+}
+
+
+export async function uploadLogo(teamId, fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return alert("Please select a file first");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await fetch(`/api/teams/${teamId}/upload_logo`, {
+            method: 'POST',
+            body: formData // No headers needed, browser sets multipart/form-data auto
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            alert("Logo Uploaded!");
+            // Refresh to see the new logo
+            location.reload();
+        } else {
+            alert("Upload Failed: " + data.message);
+        }
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Upload Error");
+    }
+}
+
+export async function updatePlayer(playerId, payload) {
+    try {
+        const res = await fetch(`${API_URL}/players/${playerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        return await res.json();
+    } catch (e) {
+        console.error("Update Player Error:", e);
+        return { status: "error", message: e.message };
+    }
+}

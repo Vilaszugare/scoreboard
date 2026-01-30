@@ -1,5 +1,5 @@
-export const API_URL = 'http://localhost:8000/api';
-
+export const API_URL = "http://127.0.0.1:8000/api";
+export const SOCKET_URL = "http://127.0.0.1:8000"; // For WebSocket connection
 const urlParams = new URLSearchParams(window.location.search);
 const mIdParam = urlParams.get('match_id');
 

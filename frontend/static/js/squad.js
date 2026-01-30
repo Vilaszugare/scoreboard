@@ -1,5 +1,6 @@
 import { API_URL } from './config.js';
 import { saveSquadToBackend } from './api.js';
+import { fetchAndRenderCommentary } from './commentary.js';
 
 export function switchTab(tabName) {
     const panels = ['matchCenterPanel', 'squadPanel', 'scorecardPanel', 'graphPanel', 'commentaryPanel'];
@@ -18,12 +19,14 @@ export function switchTab(tabName) {
     } else if (tabName === 'scorecard') {
         const el = document.getElementById('scorecardPanel');
         if (el) el.style.display = 'block';
+        if (window.loadScorecard) window.loadScorecard();
     } else if (tabName === 'graph') {
         const el = document.getElementById('graphPanel');
         if (el) el.style.display = 'block';
     } else if (tabName === 'commentary') {
         const el = document.getElementById('commentaryPanel');
         if (el) el.style.display = 'block';
+        fetchAndRenderCommentary(1); // Default to 1st Inning
     }
 
     const buttons = document.querySelectorAll('.tab-bar button');

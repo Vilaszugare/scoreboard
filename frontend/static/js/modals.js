@@ -2,14 +2,20 @@ import { API_URL, MATCH_ID } from './config.js';
 import { refreshUI } from './ui.js';
 
 let targetBatsmanRole = 'striker';
+let currentBattingSquad = [];
 
 export function initModals() {
+    console.log("Initializing Modals...");
+
+    // --- CONFIRM BUTTON ---
     const confirmBtn = document.getElementById('confirmBatsmanBtn');
     if (confirmBtn) {
+        console.log("Found confirmBatsmanBtn");
         const newBtn = confirmBtn.cloneNode(true);
         confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
 
         newBtn.addEventListener('click', async () => {
+            console.log("Confirm Batsman Clicked");
             const select = document.getElementById('newBatsmanSelect');
             const newPlayerId = select.value;
 
@@ -18,11 +24,11 @@ export function initModals() {
             console.log(`Setting ${targetBatsmanRole} to player ${newPlayerId}`);
 
             try {
-                const response = await fetch(`${API_URL}/set_new_batsman`, {
+                const response = await fetch(`${API_URL}/matches/${MATCH_ID}/set_batsman`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        match_id: MATCH_ID,
+                        match_id: MATCH_ID, // Still sending match_id for Pydantic validation if needed, though unused in route logic
                         new_player_id: parseInt(newPlayerId),
                         role: targetBatsmanRole
                     })
@@ -37,8 +43,11 @@ export function initModals() {
                 alert("Failed to set new batsman.");
             }
         });
+    } else {
+        console.error("confirmBatsmanBtn NOT found");
     }
 
+    // --- BOWLER BUTTON ---
     const confirmBowlerBtn = document.getElementById('confirmBowlerBtn');
     if (confirmBowlerBtn) {
         const newBtn = confirmBowlerBtn.cloneNode(true);
@@ -56,152 +65,405 @@ export function initModals() {
                 });
                 const data = await response.json();
                 document.getElementById('selectBowlerModal').close();
-                if (data.data) refreshUI(data.data);
-                else refreshUI(data);
+                if (data) {
+                    import('./ui.js').then(module => {
+                        if (module.refreshUI) module.refreshUI(data);
+                    });
+                } else refreshUI(data);
             } catch (error) {
                 console.error("Error setting bowler", error);
                 alert("Failed to set bowler.");
             }
         });
     }
+
+    // --- CANCEL BUTTON ---
+    const cancelBtn = document.getElementById('cancelBatsmanBtn');
+    if (cancelBtn) {
+        console.log("Found cancelBatsmanBtn, attaching listener.");
+        // Use a more direct approach for debugging: add listener directly, removing old just in case
+        const newBtn = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newBtn, cancelBtn);
+
+        newBtn.addEventListener('click', (e) => {
+            e.preventDefault(); // Good practice
+            console.log("Cancel Batsman Clicked");
+            const modal = document.getElementById('newBatsmanModal');
+            if (modal) {
+                modal.close();
+                console.log("Modal closed via Cancel button");
+            } else {
+                console.error("Modal not found when cancelling");
+            }
+        });
+    } else {
+        console.error("cancelBatsmanBtn NOT found in DOM");
+    }
+
+    // --- BACKDROP CLICK ---
+    function closeOnBackdrop(dialogId) {
+        const dialog = document.getElementById(dialogId);
+        if (!dialog) {
+            console.error(`Dialog ${dialogId} not found for backdrop listener`);
+            return;
+        }
+        console.log(`Adding backdrop listener to ${dialogId}`);
+        dialog.addEventListener('click', (event) => {
+            const rect = dialog.getBoundingClientRect();
+            // Check if click is outside the dialog bounds
+            const isInDialog = (rect.top <= event.clientY && event.clientY <= rect.top + rect.height &&
+                rect.left <= event.clientX && event.clientX <= rect.left + rect.width);
+
+            // For <dialog>, clicking on the backdrop is usually clicking on the element itself,
+            // BUT checking intersection is safer if padding/layout is tricky.
+            // Standard approach: event.target === dialog
+
+            if (event.target === dialog) {
+                console.log(`Backdrop clicked on ${dialogId}`);
+                dialog.close();
+            }
+        });
+    }
+
+    closeOnBackdrop('newBatsmanModal');
+    closeOnBackdrop('selectBowlerModal');
 }
 
 export async function openBatsmanModal(title, teamId) {
-    // If teamId not provided (e.g. called from wicket fall without specific team), try to infer?
-    // The original code called it with data.batting_team_id
-    // But handleWicketFall calls it without teamId initially? 
-    // Wait, original handleWicketFall called: openBatsmanModal("Select New Batsman");
-    // And openBatsmanModal logic:
-    // "Fetching available players for team:", teamId
-    // If no teamId passed, fetch to .../teams/undefined/players -> Error.
-    // Actually original handleWicketFall was NOT passing teamId.
-    // Does API support getting players without teamId if filtered by match?
-    // Let's check original code.
-    // Original openBatsmanModal took (title, teamId).
-    // Original handleWicketFall did NOT pass teamId.
-    // So teamId was undefined.
-    // fetch(`${API_URL}/teams/${teamId}/players`) would be `/teams/undefined/players`.
-    // That seems like a bug in the code I was given or I missed something.
-    // Ah, wait. In `changeBatsman`, it passes `data.batting_team_id`.
-    // In `handleWicketFall`, it calls `openBatsmanModal("Select New Batsman")`.
-    // Let's look at `available_players` route in backend. It takes `match_id`.
-    // But `openBatsmanModal` uses `/teams/{teamId}/players`.
-    // If `teamId` is undefined, this fetch fails.
+    console.log(`🚀 Opening Batsman Modal for Team: ${teamId}, Role: ${targetBatsmanRole}`);
 
-    // HOWEVER, the user said "Match not found" issue was the problem, implying the code MIGHT have worked otherwise?
-    // OR maybe handleWicketFall was broken too.
-    // I should fix this by using match_id if teamId is missing, OR getting teamId from window.currentMatchData.
+    // 1. We reuse the existing <dialog id="newBatsmanModal"> container
+    const modal = document.getElementById('newBatsmanModal');
 
-    if (!teamId && window.currentMatchData && window.currentMatchData.batting_team_id) {
-        teamId = window.currentMatchData.batting_team_id;
-    }
-
+    // 2. Fetch the HTML Template
     try {
-        console.log("Fetching available players for team:", teamId);
+        const t = new Date().getTime();
+        // NOTE: Uses same path logic as bowler modal
+        // backend mounts frontend/pages at root
+        let response = await fetch(`/modal_batsman.html?t=${t}`);
+        if (!response.ok) response = await fetch(`modal_batsman.html?t=${t}`);
+        if (!response.ok) throw new Error("Batsman template not found");
 
-        let url = `${API_URL}/available_players?match_id=${MATCH_ID}`;
-        if (teamId) {
-            // If we have a team ID, we might prefer using the team endpoint if strictly required,
-            // BUT `available_players` endpoint is smarter (filters out already playing).
-            // The original code used `/teams/${teamId}/players` inside openBatsmanModal?
-            // Checking line 616 of scorer.js: `fetch(${API_URL}/teams/${teamId}/players`);`
-            // So it WAS using team endpoint.
-            // If teamId is undefined, this throws 404 or 500.
-            url = `${API_URL}/teams/${teamId}/players`;
-        } else {
-            // Fallback to match available players if teamId missing
-            url = `${API_URL}/available_players?match_id=${MATCH_ID}`;
-        }
+        const htmlText = await response.text();
+        modal.innerHTML = htmlText;
 
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("Team players fetch failed");
-
-        const pData = await res.json();
-
-        const select = document.getElementById('newBatsmanSelect');
-        if (!select) return;
-
-        select.innerHTML = '';
-
-        if (pData.players && pData.players.length > 0) {
-            pData.players.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                select.appendChild(opt);
-            });
-        } else {
-            const opt = document.createElement('option');
-            opt.textContent = "No players available";
-            select.appendChild(opt);
-        }
-
-        const modalInfo = document.querySelector('#newBatsmanModal h3');
-        if (modalInfo && title) modalInfo.textContent = title;
-
-        const modal = document.getElementById('newBatsmanModal');
-        if (modal) modal.showModal();
+        // Update Title dynamically (e.g., "Select Striker")
+        const titleEl = modal.querySelector('#batsmanModalTitle');
+        if (titleEl && title) titleEl.textContent = title;
 
     } catch (e) {
-        console.error("Error opening batsman modal:", e);
-        alert("Error: " + e.message);
+        console.error(e);
+        alert("Error loading interface");
+        return;
     }
+
+    // 3. Fetch Available Players (Batting Squad)
+    try {
+        // We use the available_players endpoint which filters out players who are already out
+        const url = `${API_URL}/available_players?match_id=${MATCH_ID}&team_id=${teamId}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        currentBattingSquad = data.players || [];
+    } catch (e) {
+        console.error(e);
+        currentBattingSquad = [];
+    }
+
+    // 4. Render List
+    renderBatsmanList(currentBattingSquad);
+
+    // 5. Attach Events
+
+    // Close
+    modal.querySelector('#closeBatsmanModal').onclick = () => modal.close();
+
+    // Search
+    const searchInput = modal.querySelector('#batterSearchInput');
+    if (searchInput) {
+        searchInput.onkeyup = (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = currentBattingSquad.filter(p => p.name.toLowerCase().includes(query));
+            renderBatsmanList(filtered);
+        };
+    }
+
+    // Add New Batter
+    const addBtn = modal.querySelector('#btnAddNewBatter');
+    if (addBtn) {
+        addBtn.onclick = async () => {
+            const nameInput = modal.querySelector('#newBatterNameInput');
+            const name = nameInput.value.trim();
+            if (!name) return alert("Enter a name");
+
+            // Use the teamId passed to this function
+            if (!teamId) return alert("Error: Batting Team ID missing");
+
+            addBtn.textContent = "Saving...";
+            addBtn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_URL}/players/quick_add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, team_id: teamId, role: 'Batsman' })
+                });
+
+                if (res.ok) {
+                    const result = await res.json();
+                    currentBattingSquad.unshift(result.player);
+                    renderBatsmanList(currentBattingSquad);
+                    nameInput.value = "";
+                    // alert("Batter Added!"); // Optional
+                } else {
+                    alert("Failed to add batter");
+                }
+            } catch (e) { console.error(e); }
+            finally {
+                addBtn.textContent = "Add New Batter";
+                addBtn.disabled = false;
+            }
+        };
+    }
+
+    modal.showModal();
+}
+
+function renderBatsmanList(players) {
+    const container = document.getElementById('batterListContainer');
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (players.length === 0) {
+        container.innerHTML = "<div style='padding:20px; text-align:center; color:#ccc;'>No players available. Add one!</div>";
+        return;
+    }
+
+    players.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'player-row-red';
+
+        // SELECT LOGIC
+        row.onclick = async () => {
+            if (!confirm(`Select ${p.name} as ${targetBatsmanRole}?`)) return;
+
+            try {
+                // Determine if we need to call 'set_batsman' 
+                // We use the existing endpoint structure
+                const response = await fetch(`${API_URL}/matches/${MATCH_ID}/set_batsman`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        match_id: MATCH_ID, // ensure pydantic validation passes
+                        new_player_id: p.id,
+                        role: targetBatsmanRole // 'striker' or 'non_striker'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('newBatsmanModal').close();
+                    if (window.refreshUI) window.refreshUI(data);
+                    else {
+                        import('./ui.js').then(module => {
+                            if (module.refreshUI) module.refreshUI(data);
+                            else location.reload();
+                        });
+                    }
+                } else {
+                    alert("Failed to set batsman");
+                }
+            } catch (e) { console.error(e); }
+        };
+
+        row.innerHTML = `
+            <div class="col-idx">${idx + 1}.</div>
+            <div class="col-name-wide">
+                <span style="font-size:18px; margin-right:8px;">🏏</span> ${p.name}
+            </div>
+        `;
+        container.appendChild(row);
+    });
 }
 
 export async function handleWicketFall(data) {
-    console.warn("Handling Wicket Fall...");
+    console.log("Wicket Fall Detected:", data);
 
-    let p1 = data.current_batsmen ? data.current_batsmen[0] : null;
-    let p2 = data.current_batsmen ? data.current_batsmen[1] : null;
-
-    targetBatsmanRole = 'striker';
-
-    if (p1 && p1.empty) {
-        targetBatsmanRole = 'striker';
-    } else if (p2 && p2.empty) {
-        targetBatsmanRole = 'non_striker';
+    // 1. Force Immediate UI Refresh to show the "Empty Slot" (Red Button)
+    // We manually clear the card of the dismissed player to give instant feedback
+    if (window.refreshMatchData) {
+        window.refreshMatchData();
     }
 
-    // Pass batting team ID if available
-    const battingTeamId = data.batting_team_id;
-    await openBatsmanModal("Select New Batsman", battingTeamId);
+    // 2. Open the Modal to pick the new player
+    // Pass the team ID so we pick from the correct squad
+    const battingTeamId = data.batting_team_id || window.currentMatchData?.batting_team_id;
+
+    setTimeout(() => {
+        openBatsmanModal("Select New Batsman", battingTeamId);
+    }, 300);
 }
 
+// Global variable for filtering
+
+
+let currentBowlingSquad = [];
+
+// MAIN FUNCTION
 export async function showSelectBowlerModal() {
+    console.log("🚀 ACTIVATING NEW RED MODAL...");
+    const modal = document.getElementById('selectBowlerModal');
+
+    // 1. Fetch HTML
     try {
-        const data = window.currentMatchData;
-        if (!data || !data.bowling_team_id) {
-            // alert("Error: No Bowling Team ID found."); // Suppress alert on init if data not loaded
-            return;
+        const timestamp = new Date().getTime();
+        // backend/main.py mounts 'frontend/pages' at root '/'
+        // So 'frontend/pages/modal_bowler.html' is available at '/modal_bowler.html'
+        let response = await fetch(`/modal_bowler.html?t=${timestamp}`);
+
+        if (!response.ok) {
+            console.warn("Root fetch failed, trying relative...");
+            // Fallback: Try relative if base path is different
+            response = await fetch(`modal_bowler.html?t=${timestamp}`);
         }
 
-        console.log("Fetching bowling squad for team:", data.bowling_team_id);
-        const res = await fetch(`${API_URL}/teams/${data.bowling_team_id}/players`);
-        const pData = await res.json();
+        if (!response.ok) throw new Error(`HTTP ${response.status} - File Not Found at /modal_bowler.html`);
 
-        const select = document.getElementById('bowlerSelect');
-        if (!select) return;
-
-        select.innerHTML = '<option value="" disabled selected>Select Bowler...</option>';
-        if (pData.players && pData.players.length > 0) {
-            pData.players.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                select.appendChild(opt);
-            });
-        } else {
-            const opt = document.createElement('option');
-            opt.textContent = "No players found (Check Team Name)";
-            select.appendChild(opt);
-        }
-
-        const modal = document.getElementById('selectBowlerModal');
-        if (modal) modal.showModal();
+        const htmlText = await response.text();
+        modal.innerHTML = htmlText;
+        console.log("✅ New Modal HTML Loaded!");
     } catch (e) {
-        console.error("Error fetching bowling squad", e);
-        alert("Failed to load bowlers.");
+        console.error("❌ Failed to load modal:", e);
+        alert(`Failed to load modal design. Check console. Error: ${e.message}`);
+        return;
     }
+
+    // 2. Fetch Data (Squad)
+    try {
+        const res = await fetch(`${API_URL}/bowling_squad?match_id=${MATCH_ID}`);
+        const data = await res.json();
+        currentBowlingSquad = data.players || [];
+    } catch (e) {
+        currentBowlingSquad = [];
+    }
+
+    // 3. Render List
+    renderRedBowlerList(currentBowlingSquad);
+
+    // 4. Attach Events
+
+    // Close Button
+    const closeBtn = modal.querySelector('#closeBowlerModal');
+    if (closeBtn) closeBtn.onclick = () => modal.close();
+
+    // Search Filter
+    const searchInput = modal.querySelector('#bowlerSearchInput');
+    if (searchInput) {
+        searchInput.onkeyup = (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = currentBowlingSquad.filter(p => p.name.toLowerCase().includes(query));
+            renderRedBowlerList(filtered);
+        };
+    }
+
+    // --- ADD NEW PLAYER LOGIC ---
+    const addBtn = modal.querySelector('#btnAddNewPlayer');
+    const nameInput = modal.querySelector('#newPlayerNameInput');
+
+    if (addBtn && nameInput) {
+        addBtn.onclick = async () => {
+            const name = nameInput.value.trim();
+            if (!name) return alert("Please enter a name.");
+
+            // Get Team ID safely
+            const teamId = window.currentMatchData?.bowling_team_id;
+            if (!teamId) return alert("Error: Could not identify the Bowling Team. Please refresh the page.");
+
+            // Visual Feedback
+            addBtn.textContent = "Saving...";
+            addBtn.disabled = true;
+
+            try {
+                // Use the new Quick Add endpoint
+                const res = await fetch(`${API_URL}/players/quick_add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, team_id: teamId, role: 'Bowler' })
+                });
+
+                if (res.ok) {
+                    const result = await res.json();
+                    const newPlayer = result.player;
+
+                    // 1. Add to local list
+                    currentBowlingSquad.unshift(newPlayer); // Add to TOP of list
+                    // 2. Clear Input
+                    nameInput.value = "";
+                    // 3. Re-render list
+                    renderRedBowlerList(currentBowlingSquad);
+                    // 4. Success message
+                    console.log("Player added:", newPlayer);
+                } else {
+                    alert("Failed to save player.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Network Error");
+            } finally {
+                addBtn.textContent = "Add New Player";
+                addBtn.disabled = false;
+            }
+        };
+    }
+
+    modal.showModal();
+}
+
+// Render Function
+function renderRedBowlerList(players) {
+    const container = document.getElementById('bowlerListContainer');
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (players.length === 0) {
+        container.innerHTML = "<div style='text-align:center; padding:30px; color:#ffcccc; font-style:italic;'>No players found.<br>Use the box above to add one.</div>";
+        return;
+    }
+
+    players.forEach((p, idx) => {
+        const row = document.createElement('div');
+        row.className = 'player-row-red';
+        row.onclick = () => selectBowler(p.id);
+
+        row.innerHTML = `
+            <div class="col-idx">${idx + 1}.</div>
+            <div class="col-name-wide">
+                <span style="font-size:18px; margin-right:8px;">👤</span>
+                ${p.name}
+            </div>
+            <div class="col-stats">0.0-0-0</div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+// Ensure selectBowler function exists in this file (or import it)
+async function selectBowler(playerId) {
+    try {
+        const res = await fetch(`${API_URL}/matches/${MATCH_ID}/set_bowler`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player_id: playerId, role: 'bowler' })
+        });
+        if (res.ok) {
+            const fullMatchData = await res.json(); // <--- GET DATA
+            document.getElementById('selectBowlerModal').close();
+
+            // INSTANT UPDATE (No Reload)
+            import('./ui.js').then(m => m.refreshUI(fullMatchData));
+        } else {
+            alert("Error setting bowler");
+        }
+    } catch (e) { console.error(e); }
 }
 
 // Expose to window
@@ -215,7 +477,8 @@ window.changeBatsman = async function (role) {
         return;
     }
 
-    await openBatsmanModal(`Select New ${role === 'striker' ? 'Striker' : 'Non-Striker'}`, data.batting_team_id);
+    const title = role === 'striker' ? 'Select New Striker' : 'Select New Non-Striker';
+    await openBatsmanModal(title, data.batting_team_id);
 }
 
 window.showSelectBowlerModal = showSelectBowlerModal;

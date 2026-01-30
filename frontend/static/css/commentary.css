@@ -1,0 +1,123 @@
+/* ===== Commentary Styles ===== */
+.comm-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.comm-tab {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: #ccc;
+    padding: 6px 15px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.comm-tab.active {
+    background: var(--btn-num);
+    /* Soft Purple */
+    color: white;
+    border-color: var(--btn-num);
+}
+
+.comm-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* Over Summary Strip */
+.comm-over-summary {
+    background: rgba(126, 87, 194, 0.2);
+    /* Low opacity purple */
+    border-left: 4px solid var(--btn-num);
+    padding: 8px 12px;
+    margin: 10px 0;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 4px;
+}
+
+.comm-summary-text {
+    font-size: 13px;
+    color: #e0e0e0;
+}
+
+/* Ball Row */
+.comm-ball-row {
+    display: flex;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    align-items: flex-start;
+}
+
+.comm-ball-meta {
+    width: 80px;
+    font-size: 13px;
+    color: #aaa;
+    margin-right: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.comm-ball-badge {
+    min-width: 26px;
+    height: 26px;
+    background: #444;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 12px;
+    color: white;
+}
+
+.comm-ball-badge.four {
+    background: var(--mint);
+    color: #000;
+}
+
+.comm-ball-badge.six {
+    background: var(--btn-num);
+    /* Purple */
+}
+
+.comm-ball-badge.wicket {
+    background: var(--btn-red);
+}
+
+.comm-ball-badge.dot {
+    background: #555;
+    color: #aaa;
+}
+
+.comm-ball-badge.extra {
+    background: var(--btn-gray);
+    color: var(--mint);
+}
+
+.comm-text {
+    flex: 1;
+    font-size: 14px;
+    color: #ddd;
+    line-height: 1.4;
+    padding-top: 3px;
+}
+
+.comm-text strong {
+    color: #fff;
+}
+
+.comm-wicket-highlight {
+    color: var(--coral);
+    font-weight: bold;
+}
