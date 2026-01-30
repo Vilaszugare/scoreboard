@@ -32,6 +32,8 @@ app.include_router(matches.router, prefix="/api", tags=["Matches"])
 app.include_router(scoring.router, prefix="/api", tags=["Scoring"])
 app.include_router(teams.router, prefix="/api", tags=["Teams"])
 app.include_router(undo.router, prefix="/api", tags=["Buttons"])
+from routes import match_settings_routes
+app.include_router(match_settings_routes.router, prefix="/api", tags=["Settings"])
 
 # Import players router inside to avoid circular imports layout if any, or just at top
 from routes import players, commentary

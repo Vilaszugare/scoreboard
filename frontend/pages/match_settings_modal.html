@@ -38,8 +38,15 @@
 
         <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
             <label style="color: white; font-size: 15px;">Match State :</label>
-            <input type="text" id="ms-match-state" value="Group Match"
-                style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px;">
+            <select id="ms-match-state"
+                style="background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; width: 100%;">
+                <option value="League Match">League Match</option>
+                <option value="Group Match">Group Match</option>
+                <option value="Quarter-Final">Quarter-Final</option>
+                <option value="Semi-Final">Semi-Final</option>
+                <option value="3rd & 4th place">3rd & 4th place</option>
+                <option value="Final">Final</option>
+            </select>
         </div>
 
         <div style="display: grid; grid-template-columns: 160px 1fr; align-items: center;">
