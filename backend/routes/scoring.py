@@ -166,6 +166,10 @@ async def update_score(payload: ScoreUpdate):
                 fresh_match = await fetch_match_state(conn, match_id)
                 await check_over_completion(conn, fresh_match, match_id)
                 if fresh_match['balls'] >= 6 or (match['overs'] != fresh_match['overs']):
+                     # AUTO-UNSET BOWLER (New Feature)
+                     # Requirement: "As soon as the 6th valid ball... automatically remove (unset) the current bowler"
+                     await conn.execute("UPDATE matches SET current_bowler_id = NULL WHERE id = $1", match_id)
+                     
                      return {"status": "over_complete", "message": "Over Complete", "data": await fetch_full_match_state(conn, match_id)}
 
             return {"status": "success", "data": await fetch_full_match_state(conn, match_id)}
