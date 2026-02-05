@@ -190,8 +190,19 @@ export async function openBatsmanModal(title, teamId) {
     // Add New Batter
     const addBtn = modal.querySelector('#btnAddNewBatter');
     if (addBtn) {
+        const nameInput = modal.querySelector('#newBatterNameInput');
+
+        // 1. ADD ENTER KEY LISTENER
+        if (nameInput) {
+            nameInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addBtn.click();
+                }
+            });
+        }
+
         addBtn.onclick = async () => {
-            const nameInput = modal.querySelector('#newBatterNameInput');
             const name = nameInput.value.trim();
             if (!name) return alert("Enter a name");
 
@@ -210,10 +221,13 @@ export async function openBatsmanModal(title, teamId) {
 
                 if (res.ok) {
                     const result = await res.json();
-                    currentBattingSquad.unshift(result.player);
+                    // FIX: Backend returns the player object directly, not wrapped in 'player'
+                    // If backend returns { "id": 1, "name": "Vilas", ... }
+                    currentBattingSquad.unshift(result);
+
                     renderBatsmanList(currentBattingSquad);
                     nameInput.value = "";
-                    // alert("Batter Added!"); // Optional
+                    nameInput.focus(); // Keep focus for rapid entry
                 } else {
                     alert("Failed to add batter");
                 }
@@ -303,6 +317,7 @@ export async function handleWicketFall(data) {
     }, 300);
 }
 
+
 // Global variable for filtering
 
 
@@ -370,6 +385,14 @@ export async function showSelectBowlerModal() {
     const nameInput = modal.querySelector('#newPlayerNameInput');
 
     if (addBtn && nameInput) {
+        // 1. ADD ENTER KEY LISTENER
+        nameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addBtn.click();
+            }
+        });
+
         addBtn.onclick = async () => {
             const name = nameInput.value.trim();
             if (!name) return alert("Please enter a name.");
@@ -392,12 +415,14 @@ export async function showSelectBowlerModal() {
 
                 if (res.ok) {
                     const result = await res.json();
-                    const newPlayer = result.player;
+                    // FIX: Backend returns player object directly
+                    const newPlayer = result;
 
                     // 1. Add to local list
                     currentBowlingSquad.unshift(newPlayer); // Add to TOP of list
                     // 2. Clear Input
                     nameInput.value = "";
+                    nameInput.focus();
                     // 3. Re-render list
                     renderRedBowlerList(currentBowlingSquad);
                     // 4. Success message

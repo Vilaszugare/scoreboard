@@ -1,9 +1,13 @@
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
 import os
+from fastapi.responses import StreamingResponse
+from sse_manager import manager
+import asyncio
 from database import init_db, close_db
 from routes import matches, scoring, teams
 from routes.buttons import undo
@@ -27,6 +31,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Performance: Compress large JSON responses ---
+# minimum_size=1000 means only compress responses larger than 1KB
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # --- Include Routers ---
 app.include_router(matches.router, prefix="/api", tags=["Matches"])
 app.include_router(scoring.router, prefix="/api", tags=["Scoring"])
@@ -39,6 +47,27 @@ app.include_router(match_settings_routes.router, prefix="/api", tags=["Settings"
 from routes import players, commentary
 app.include_router(players.router, prefix="/api", tags=["Players"])
 app.include_router(commentary.router, prefix="/api", tags=["Commentary"])
+
+# --- SSE STREAM ENDPOINT ---
+@app.get("/api/stream/{match_id}")
+async def stream_match_data(match_id: int):
+    """
+    SSE Endpoint: Viewers connect here to get live updates.
+    This holds the connection open but consumes negligible CPU (Zero-Load).
+    """
+    async def event_generator():
+        # 1. Subscribe this client
+        q = await manager.subscribe(match_id)
+        try:
+            while True:
+                # 2. Wait for data (yields control, zero loop overhead)
+                data = await q.get()
+                yield data
+        except asyncio.CancelledError:
+            # 3. Handle disconnect (Tab closed)
+            await manager.unsubscribe(match_id, q)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # --- Serve Static Files ---
 # 1. Mount /static for assets (CSS, JS, Images)
@@ -60,6 +89,8 @@ if os.path.exists(pages_path):
     app.mount("/", StaticFiles(directory=pages_path, html=True), name="pages")
 else:
     print(f"Warning: Pages directory not found at {pages_path}")
+
+
 
 if __name__ == "__main__":
     import uvicorn

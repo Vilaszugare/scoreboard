@@ -29,24 +29,26 @@ async def update_match_settings(match_id: int, settings: MatchSettingsUpdate):
             if not match:
                 raise HTTPException(status_code=404, detail="Match not found")
 
-            # 2. Validation Logic: Check if Match Started
-            # Match Started if: valid_balls > 0 OR current_inning > 1
-            is_match_started = (match['valid_balls'] > 0) or (match['current_inning'] > 1)
+            # 2. Lock Batting Team
+            # IF balls > 0 (Match Started): IGNORE the user's batting_team_id. Force the update to use the existing database value.
+            # IF balls == 0 (Match Not Started): Allow the user to change the batting team.
+            is_match_started = (match['valid_balls'] > 0)
             
             final_batting_team_id = settings.batting_team_id
 
             if is_match_started:
-                # IGNORE user input for batting team, enforce existing
                 final_batting_team_id = match['batting_team_id']
             
-            # 3. Smart Toss Calculation (Always Run)
-            # If toss_winner == batting_team -> chose 'bat'
-            # Else -> chose 'bowl'
+            # 3. Auto-Calculate Decision
+            # Compare toss_winner_id (from user) vs. final_batting_team_id.
+            # If Same: toss_decision = 'bat'.
+            # If Different: toss_decision = 'bowl'.
             toss_decision = 'bowl'
             if settings.toss_winner_id == final_batting_team_id:
                 toss_decision = 'bat'
 
-            # 4. Execute Update
+            # 4. Update Database
+            # We map settings.match_status -> match_type in the DB
             await conn.execute("""
                 UPDATE matches 
                 SET match_number = $1::INTEGER, 

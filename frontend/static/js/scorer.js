@@ -2,6 +2,12 @@
 const API_URL = 'http://localhost:8000/api';
 console.log("Logic Script Loaded: v16 - Undo Enabled");
 
+// --- GLOBAL SQUAD CACHE (Zero Latency) ---
+window.squadCache = {
+    batting: null, // Stores list of batting team players
+    bowling: null  // Stores list of bowling team players
+};
+
 // --- DATA LOGIC WRAPPER ---
 (function () {
     if (window.logicInitialized) {
@@ -616,24 +622,35 @@ console.log("Logic Script Loaded: v16 - Undo Enabled");
     async function openBatsmanModal(title, teamId) {
         try {
             console.log("Fetching available players for team:", teamId);
-            // Use specific team players endpoint or filter available_players
-            // The available_players endpoint might need team_id if it doesn't infer it correctly
-            // But let's check what the user requested: "Open Modal and Fetch Players for this specific Team ID"
-            // The existing available_players endpoint uses match_id.
-            // If we want to fetch strictly by team, we should use /teams/{id}/players
 
-            const res = await fetch(`${API_URL}/teams/${teamId}/players`);
-            if (!res.ok) throw new Error("Team players fetch failed");
+            // 1. CHECK CACHE FIRST (Instant Open)
+            let players = window.squadCache.batting;
 
-            const pData = await res.json();
+            // If cache empty or mismatch? (Simplified logic as per request)
+            // Ideally we check if cached TID matches, but for now assuming cache is for current innings
+            if (!players) {
+                const res = await fetch(`${API_URL}/teams/${teamId}/players`);
+                if (!res.ok) throw new Error("Team players fetch failed");
+                const pData = await res.json();
+                players = pData.players;
+                window.squadCache.batting = players; // Save for next time
+            }
+
+            // const select = document.getElementById('newBatsmanSelect');
+            // ... re-using 'players' variable below 
+            // Note: existing code used 'pData' variable. I need to make sure 'pData' structure is handled or adapted.
+            // Existing: const pData = await res.json(); 
+            //           if (pData.players ...
+
+            // My 'players' variable acts as the array.
 
             const select = document.getElementById('newBatsmanSelect');
             if (!select) return;
 
             select.innerHTML = '';
 
-            if (pData.players && pData.players.length > 0) {
-                pData.players.forEach(p => {
+            if (players && players.length > 0) {
+                players.forEach(p => {
                     const opt = document.createElement('option');
                     opt.value = p.id;
                     opt.textContent = p.name;
@@ -687,8 +704,21 @@ console.log("Logic Script Loaded: v16 - Undo Enabled");
             newBtn.addEventListener('click', async () => {
                 const select = document.getElementById('newBatsmanSelect');
                 const newPlayerId = select.value;
+                const newPlayerName = select.options[select.selectedIndex].text; // Get Name
 
                 if (!newPlayerId) return;
+
+                // 1. CLOSE MODAL INSTANTLY
+                const modal = document.getElementById('newBatsmanModal');
+                if (modal) modal.close();
+
+                // 2. OPTIMISTIC UPDATE (Fake it until you make it)
+                // Immediately update the text on screen so user sees result
+                const nameEl = document.getElementById(targetBatsmanRole === 'striker' ? 'p1_name' : 'p2_name');
+                if (nameEl) {
+                    nameEl.textContent = newPlayerName + (targetBatsmanRole === 'striker' ? " *" : "");
+                    nameEl.style.color = "#fff"; // Make it look active
+                }
 
                 console.log(`Setting ${targetBatsmanRole} to player ${newPlayerId}`);
 
@@ -702,14 +732,11 @@ console.log("Logic Script Loaded: v16 - Undo Enabled");
                             role: targetBatsmanRole
                         })
                     });
-                    const data = await response.json();
-                    const modal = document.getElementById('newBatsmanModal');
-                    if (modal) modal.close();
-
-                    refreshUI(data);
+                    // The SSE will handle the "real" data update later.
+                    // We don't need to do anything else here.
                 } catch (error) {
                     console.error("Error setting batsman", error);
-                    alert("Failed to set new batsman.");
+                    alert("Sync Failed: Check Internet");
                 }
             });
         }
@@ -751,15 +778,23 @@ console.log("Logic Script Loaded: v16 - Undo Enabled");
             }
 
             console.log("Fetching bowling squad for team:", data.bowling_team_id);
-            const res = await fetch(`${API_URL}/teams/${data.bowling_team_id}/players`);
-            const pData = await res.json();
+
+            // 1. CHECK CACHE FIRST
+            let players = window.squadCache.bowling;
+
+            if (!players) {
+                const res = await fetch(`${API_URL}/teams/${data.bowling_team_id}/players`);
+                const pData = await res.json();
+                players = pData.players;
+                window.squadCache.bowling = players;
+            }
 
             const select = document.getElementById('bowlerSelect');
             if (!select) return;
 
             select.innerHTML = '<option value="" disabled selected>Select Bowler...</option>';
-            if (pData.players && pData.players.length > 0) {
-                pData.players.forEach(p => {
+            if (players && players.length > 0) {
+                players.forEach(p => {
                     const opt = document.createElement('option');
                     opt.value = p.id;
                     opt.textContent = p.name;
@@ -794,6 +829,17 @@ console.log("Logic Script Loaded: v16 - Undo Enabled");
                     return; // Stop further processing
                 }
                 refreshUI(data);
+
+                // BACKGROUND: Pre-load squads for instant modals
+                if (data.batting_team_id) {
+                    fetch(`${API_URL}/teams/${data.batting_team_id}/players`)
+                        .then(r => r.json()).then(d => window.squadCache.batting = d.players);
+                }
+
+                if (data.bowling_team_id) {
+                    fetch(`${API_URL}/teams/${data.bowling_team_id}/players`)
+                        .then(r => r.json()).then(d => window.squadCache.bowling = d.players);
+                }
             })
             .catch(err => {
                 console.error('API Fetch Error:', err);

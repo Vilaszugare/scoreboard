@@ -162,3 +162,44 @@ export async function updatePlayer(playerId, payload) {
         return { status: "error", message: e.message };
     }
 }
+
+// --- LIVE STREAM LOGIC (SSE) ---
+let eventSource = null;
+
+export function initLiveScore(matchId) {
+    if (!matchId) return;
+
+    // 1. Close existing connection if any (prevents duplicates)
+    if (eventSource) {
+        console.log("⚠️ Closing previous SSE connection");
+        eventSource.close();
+    }
+
+    console.log(`📡 Connecting to SSE Stream for Match ${matchId}...`);
+
+    // 2. Open Connection
+    eventSource = new EventSource(`${API_URL}/stream/${matchId}`);
+
+    // 3. Listen for Updates
+    eventSource.onmessage = function (event) {
+        // Parse the JSON data sent by Python
+        const data = JSON.parse(event.data);
+        // console.log("⚡ SSE Update:", data); // Uncomment for debug
+
+        // Dynamically import UI to avoid circular dependency issues
+        import('./ui.js').then(ui => {
+            if (ui.refreshUI) ui.refreshUI(data);
+        });
+    };
+
+    // 4. Handle Errors (Auto-reconnect is built-in to browser)
+    eventSource.onerror = function (err) {
+        // Browser will auto-retry connection in ~3 seconds
+        // We only log warnings to keep console clean
+        if (eventSource.readyState === EventSource.CLOSED) {
+            console.warn("⚠️ Stream Closed.");
+        } else {
+            // console.warn("⚠️ Stream interrupted. Reconnecting...");
+        }
+    };
+}

@@ -144,3 +144,28 @@ CREATE TABLE IF NOT EXISTS commentary (
     event_type TEXT, 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- ==========================================
+-- 7. PERFORMANCE INDEXES (Speed Optimization)
+-- ==========================================
+
+-- 1. Accelerate Score Calculation (Used in fetch_full_match_state)
+-- Speeds up: SELECT SUM(runs) FROM balls WHERE match_id = X
+CREATE INDEX IF NOT EXISTS idx_balls_match_inning 
+ON balls (match_id, inning_no);
+
+-- 2. Accelerate Player Stats (Used for Batsman/Bowler Cards)
+-- Speeds up: SELECT runs FROM balls WHERE striker_id = Y
+CREATE INDEX IF NOT EXISTS idx_balls_striker 
+ON balls (striker_id);
+
+CREATE INDEX IF NOT EXISTS idx_balls_bowler 
+ON balls (bowler_id);
+
+-- 3. Accelerate Match Lookups
+CREATE INDEX IF NOT EXISTS idx_matches_teams 
+ON matches (team_a_id, team_b_id);
+
+-- 4. Accelerate Wicket Lookups
+CREATE INDEX IF NOT EXISTS idx_wickets_ball_id 
+ON wickets (ball_id);

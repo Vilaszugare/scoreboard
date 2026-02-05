@@ -19,7 +19,13 @@ db_pool = None
 async def init_db():
     global db_pool
     try:
-        db_pool = await asyncpg.create_pool(DATABASE_URL, statement_cache_size=0)
+        # Memory Optimization: Limit pool size for 2GB RAM VPS
+        db_pool = await asyncpg.create_pool(
+            DATABASE_URL, 
+            min_size=1, 
+            max_size=10, 
+            statement_cache_size=0
+        )
         print("✅ Database connection pool initialized.")
         return db_pool
     except Exception as e:

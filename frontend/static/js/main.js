@@ -3,6 +3,7 @@ import { bootstrap } from './ui.js';
 import { initButtons } from './events.js';
 import { initModals } from './modals.js';
 import { API_URL, MATCH_ID } from './config.js';
+import { initLiveScore } from './api.js'; // <-- ADD THIS IMPORT
 import './squad.js'; // Ensure switchTab is exposed
 
 console.log("🚀 App Started");
@@ -11,31 +12,29 @@ console.log("🚀 App Started");
 let pollingInterval = null;
 
 function startLiveUpdates(matchId) {
+    console.log("🚀 Starting Zero-Load Live Updates (SSE)...");
+
+    // 1. Start the Event Listener (Real-time, Instant)
+    initLiveScore(matchId);
+
+    // 2. OPTIONAL SAFETY NET (The "Senior Dev" Trick)
+    // We keep a very slow poll (every 30 seconds) just in case the socket freezes.
+    // This ensures 100% reliability with 0% noticeable load.
     if (pollingInterval) clearInterval(pollingInterval);
-
-    console.log("📡 Starting Live Updates for Viewers...");
-
     pollingInterval = setInterval(async () => {
-        // 1. Check if the tab is visible
         if (document.hidden) return;
-
         try {
-            // 2. Fetch the latest data silently
-            // Uses the correct endpoint structure: /match_data?match_id=...
             const response = await fetch(`${API_URL}/match_data?match_id=${matchId}`);
-
             if (response.ok) {
                 const data = await response.json();
-
-                // 3. Update the UI silently
                 import('./ui.js').then(ui => {
                     if (ui.refreshUI) ui.refreshUI(data);
                 });
             }
         } catch (e) {
-            console.warn("Live update failed, retrying...", e);
+            console.warn("Safety poll failed", e);
         }
-    }, 2000); // 2 seconds
+    }, 30000); // 30 Seconds (Very Slow)
 }
 
 // Stop updates when leaving

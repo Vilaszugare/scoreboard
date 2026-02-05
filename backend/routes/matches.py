@@ -44,13 +44,7 @@ class QuickAddPlayerRequest(BaseModel):
     team_id: int
     role: str = "All Rounder" # Default role
 
-class MatchSettingsUpdate(BaseModel):
-    match_number: int
-    total_overs: int
-    balls_per_over: int
-    match_status: str
-    toss_winner_id: int
-    batting_team_id: int
+
 
 class ScoreCorrectionRequest(BaseModel):
     inning: int
@@ -828,33 +822,7 @@ async def quick_add_player(payload: QuickAddPlayerRequest):
         
         return {"id": row['id'], "name": payload.name, "role": payload.role, "team_id": payload.team_id}
 
-@router.put("/matches/{match_id}/settings")
-async def update_match_settings(match_id: int, settings: MatchSettingsUpdate):
-    async with database.db_pool.acquire() as conn:
-        # 1. Update the Match Details
-        # User requested updating ID, but also we should be careful. 
-        # We will update 'match_number' column if it exists, but the user explicitly asked to SET id = $1.
-        # We will also map 'match_status' input to 'match_type' column as planned.
-        
-        await conn.execute("""
-            UPDATE matches 
-            SET id = CAST($1 AS BIGINT), 
-                match_number = CAST($1 AS INTEGER), -- Also sync match_number column 
-                total_overs = $2,
-                match_type = $3, -- Mapped from settings.match_status
-                toss_winner_id = $4,
-                batting_team_id = $5,
-                -- We might also need to swap bowling_team_id if batting_team_id changed.
-                -- Logic: If batting_team_id is A, bowling is B.
-                bowling_team_id = CASE 
-                    WHEN team_a_id = $5 THEN team_b_id 
-                    ELSE team_a_id 
-                END
-            WHERE id = $6
-        """, settings.match_number, settings.total_overs, settings.match_status, 
-             settings.toss_winner_id, settings.batting_team_id, match_id)
-        
-        return {"status": "success", "message": "Match settings updated successfully"}
+
 
 @router.delete("/matches/{match_id}")
 async def delete_match(match_id: int):

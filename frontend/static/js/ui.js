@@ -1257,3 +1257,26 @@ export function bootstrap() {
             alert("Failed to load match data. See console.");
         });
 }
+
+// --- ENTER KEY SUPPORT FOR SQUAD SETTINGS ---
+// Dynamically attach listeners on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Select inputs by the class seen in index.html: class="quick-input"
+    const squadInputs = document.querySelectorAll('.quick-input');
+
+    squadInputs.forEach(input => {
+        input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Stop any default form submission
+
+                // 2. Find the "Add Player" button associated with THIS input.
+                // In index.html: <input> is followed immediately by <button>
+                const addBtn = this.nextElementSibling || this.parentElement.querySelector('button');
+
+                if (addBtn) {
+                    addBtn.click(); // Trigger the existing logic (quickAddPlayer)
+                }
+            }
+        });
+    });
+});

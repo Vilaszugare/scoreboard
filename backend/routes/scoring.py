@@ -6,6 +6,12 @@ from common import (
 )
 from .matches import fetch_full_match_state
 
+
+
+# ... existing imports ...
+# ADD THIS LINE:
+from sse_manager import manager
+
 router = APIRouter()
 
 @router.post("/end_inning")
@@ -21,12 +27,19 @@ async def end_inning(payload: SimpleMatchRequest):
                 first_inn_score = match['team_score']
                 target = first_inn_score + 1
                 
-                # 2. Swap Teams
+                # 2. Swap Teams (Names & IDs)
                 old_batting = match['team_name_batting']
                 old_bowling = match['team_name_bowling']
                 
+                # Fetch IDs 
+                old_batting_id = match['batting_team_id']
+                old_bowling_id = match['bowling_team_id']
+                
                 new_batting = old_bowling
                 new_bowling = old_batting
+                
+                new_batting_id = old_bowling_id
+                new_bowling_id = old_batting_id
                 
                 # 3. Reset for Inning 2
                 await conn.execute("""
@@ -36,6 +49,8 @@ async def end_inning(payload: SimpleMatchRequest):
                         target_score = $1,
                         team_name_batting = $2,
                         team_name_bowling = $3,
+                        batting_team_id = $5,
+                        bowling_team_id = $6,
                         team_score = 0,
                         wickets = 0,
                         overs = 0, 
@@ -44,8 +59,14 @@ async def end_inning(payload: SimpleMatchRequest):
                         non_striker_id = NULL,
                         current_bowler_id = NULL
                     WHERE id = $4
-                """, target, new_batting, new_bowling, match_id)
+                """, target, new_batting, new_bowling, match_id, new_batting_id, new_bowling_id)
                 
+                # --- INSERT THIS BLOCK BEFORE RETURN ---
+                # Fetch state to show the target immediately to viewers
+                full_state = await fetch_full_match_state(conn, match_id)
+                await manager.broadcast(match_id, full_state)
+                # ---------------------------------------
+
                 return {
                     "status": "inning_break",
                     "target": target,
@@ -165,14 +186,21 @@ async def update_score(payload: ScoreUpdate):
 
                 fresh_match = await fetch_match_state(conn, match_id)
                 await check_over_completion(conn, fresh_match, match_id)
-                if fresh_match['balls'] >= 6 or (match['overs'] != fresh_match['overs']):
-                     # AUTO-UNSET BOWLER (New Feature)
-                     # Requirement: "As soon as the 6th valid ball... automatically remove (unset) the current bowler"
-                     await conn.execute("UPDATE matches SET current_bowler_id = NULL WHERE id = $1", match_id)
-                     
-                     return {"status": "over_complete", "message": "Over Complete", "data": await fetch_full_match_state(conn, match_id)}
+            # --- REPLACE THE FINAL RETURN WITH THIS BLOCK ---
+            
+            # 1. Fetch the fresh full state
+            full_state = await fetch_full_match_state(conn, match_id)
+            
+            # 2. 🔥 BROADCAST TO SSE LISTENERS 🔥
+            # This pushes the data to everyone watching (0.01s latency)
+            await manager.broadcast(match_id, full_state)
 
-            return {"status": "success", "data": await fetch_full_match_state(conn, match_id)}
+            if fresh_match['balls'] >= 6 or (match['overs'] != fresh_match['overs']):
+                 # Auto-unset bowler logic (keep existing)
+                 await conn.execute("UPDATE matches SET current_bowler_id = NULL WHERE id = $1", match_id)
+                 return {"status": "over_complete", "message": "Over Complete", "data": full_state}
+
+            return {"status": "success", "data": full_state}
     except Exception as e:
         print(f"Error: {e}")
         return {"status": "error", "message": str(e)}
