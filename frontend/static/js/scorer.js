@@ -228,15 +228,40 @@ window.squadCache = {
             oversTextEl.textContent = `(${oversStr} ov)`;
         }
 
-        const teamNameEl = document.getElementById('header_team_name');
-        if (teamNameEl) {
-            teamNameEl.textContent = data.batting_team || "Batting Team";
+        // --- TEAM DISPLAY LOGIC (FIXED) ---
+        // Goal: Batting Team always on Left, Bowling Team on Right.
+
+        let leftName, rightName, leftLogo, rightLogo;
+
+        // Check if Team B is Batting (Explicit Check)
+        // If Team B is batting, we SWAP (B on Left, A on Right)
+        if (data.batting_team_id === data.team_b_id) {
+            // Team B is Batting (Left)
+            leftName = data.team_b || data.batting_team || "Team B";
+            rightName = data.team_a || data.bowling_team || "Team A";
+            leftLogo = data.team_b_logo || data.batting_team_logo;
+            rightLogo = data.team_a_logo || data.bowling_team_logo;
+        } else {
+            // Team A is Batting OR Default (Left)
+            leftName = data.team_a || data.batting_team || "Team A";
+            rightName = data.team_b || data.bowling_team || "Team B";
+            leftLogo = data.team_a_logo || data.batting_team_logo;
+            rightLogo = data.team_b_logo || data.bowling_team_logo;
         }
 
+        // Apply Names
+        const teamNameEl = document.getElementById('header_team_name');
+        if (teamNameEl) teamNameEl.textContent = leftName;
+
         const bowlTeamEl = document.getElementById('header_bowling_name');
-        if (bowlTeamEl) {
-            bowlTeamEl.textContent = data.bowling_team || "Bowling Team";
-        }
+        if (bowlTeamEl) bowlTeamEl.textContent = rightName;
+
+        // Apply Logos (if elements exist)
+        const batLogoEl = document.getElementById('header_batting_logo');
+        if (batLogoEl && leftLogo) batLogoEl.src = leftLogo;
+
+        const bowlLogoEl = document.getElementById('header_bowling_logo');
+        if (bowlLogoEl && rightLogo) bowlLogoEl.src = rightLogo;
 
         // 2. The Target Logic (Crucial Fix)
         const targetBox = document.getElementById('target-display');

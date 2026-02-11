@@ -142,6 +142,10 @@ async def update_score(payload: ScoreUpdate):
                    extra_type, is_boundary_4, is_boundary_6, wicket_type
                 )
                 
+                # --- NEW: LOG EVENT FOR UNDO ---
+                await conn.execute("INSERT INTO match_events (match_id, event_type, event_id) VALUES ($1, 'BALL', $2)", match_id, ball_id)
+                # -------------------------------
+                
                 total_runs = runs_batsman + runs_extras
                 if total_runs != 0:
                     await conn.execute("UPDATE matches SET team_score = team_score + $1 WHERE id = $2", total_runs, match_id)

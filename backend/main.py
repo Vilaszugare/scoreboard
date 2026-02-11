@@ -11,6 +11,9 @@ import asyncio
 from database import init_db, close_db
 from routes import matches, scoring, teams
 from routes.buttons import undo
+import psutil
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -83,6 +86,21 @@ else:
     print(f"Warning: Static directory not found at {static_path}")
 
 # 2. Mount / (root) to frontend/pages for HTML files
+@app.get("/memory")
+def memory_usage():
+    process = psutil.Process(os.getpid())
+    ram_mb = process.memory_info().rss / 1024 / 1024
+    return {
+        "ram_used_mb": round(ram_mb, 2)
+    }
+
+
+
+def get_ram_usage_mb():
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 1024 / 1024
+
+
 # This must be the last mount as it catches all root requests
 pages_path = os.path.join(FRONTEND_DIR, "pages")
 if os.path.exists(pages_path):

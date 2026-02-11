@@ -15,7 +15,9 @@ window.openMatchSettingsModal = function () {
 
         // Populate Inputs
         const matchNoInput = document.getElementById('ms-match-no');
-        if (matchNoInput) matchNoInput.value = d.match_number || "";
+        if (matchNoInput) {
+            matchNoInput.value = (d.match_number !== undefined && d.match_number !== null) ? d.match_number : "";
+        }
 
         const oversInput = document.getElementById('ms-overs');
         if (oversInput) oversInput.value = d.total_overs || 20;
@@ -26,7 +28,7 @@ window.openMatchSettingsModal = function () {
         const stateInput = document.getElementById('ms-match-state');
         if (stateInput) stateInput.value = d.match_type || "Group Match";
 
-        // Populate Teams Dropdown
+        // Populate Teams Dropdown (with empty option at top)
         const tossSelect = document.getElementById('ms-toss-winner');
         const batSelect = document.getElementById('ms-bat-first');
 
@@ -37,59 +39,54 @@ window.openMatchSettingsModal = function () {
             const t1_id = d.team_a_id || d.batting_team_id;
             const t2_id = d.team_b_id || d.bowling_team_id;
 
-            return `<option value="${t1_id}">${t1}</option>
+            // Added empty option for "Blank by Default" feature
+            return `<option value="" selected></option>
+                     <option value="${t1_id}">${t1}</option>
                      <option value="${t2_id}">${t2}</option>`;
         };
 
         if (tossSelect) tossSelect.innerHTML = createOps();
         if (batSelect) batSelect.innerHTML = createOps();
 
-        // Select current values
-        if (d.toss_winner && tossSelect) tossSelect.value = d.toss_winner;
+        // FEATURE 1: BLANK BY DEFAULT
+        // We do NOT set the values to d.toss_winner or derived Bat First.
+        // We intentionally leave them as "" (from the `selected` empty option above).
 
-        // Determine Bat First Team
-        let batFirstId = null;
-        if (d.toss_winner && d.toss_decision) {
-            if (d.toss_decision === 'bat') {
-                batFirstId = d.toss_winner;
-            } else {
-                const t1_id = d.team_a_id || d.batting_team_id;
-                const t2_id = d.team_b_id || d.bowling_team_id;
-                batFirstId = (d.toss_winner == t1_id) ? t2_id : t1_id;
-            }
-        } else {
-            // Fallback
-            if (d.innings && d.innings.current_inning === 1) {
-                batFirstId = d.batting_team_id;
-            }
-        }
+        if (tossSelect) tossSelect.value = "";
 
-        if (batFirstId && batSelect) batSelect.value = batFirstId;
-
-        // --- NEW SAFETY CHECK: Lock Batting Team if Match Started ---
+        // FEATURE 2: AUTO-LOCK BATTING TEAM
         if (batSelect) {
+            batSelect.value = ""; // Blank by default
+
             // Check if match has started
-            // Condition: current_inning > 1 OR overs != "0.0"
-            // We can check d.innings.overs if available
+            // Condition: Striker Selected OR Balls Bowled > 0
+            // This is safer than just checking innings.
+
             let hasStarted = false;
 
-            if (d.innings) {
-                if (d.innings.current_inning > 1) {
-                    hasStarted = true;
-                } else {
-                    // Check overs string "0.0"
-                    if (d.innings.overs && d.innings.overs !== "0.0" && d.innings.overs !== "0") {
-                        hasStarted = true;
-                    }
-                }
+            // Check for striker
+            if (d.current_striker_id || d.non_striker_id) {
+                hasStarted = true;
+            }
+            // Check for balls via total overs (simple proxy) or balls count if available
+            // d.innings.overs is "X.Y". If not "0.0", it started.
+            if (d.innings && d.innings.overs && d.innings.overs !== "0.0") {
+                hasStarted = true;
             }
 
             if (hasStarted) {
                 batSelect.disabled = true;
                 batSelect.title = "Cannot change batting team after play has started";
-                // Optional: Add visual style
                 batSelect.style.cursor = "not-allowed";
                 batSelect.style.opacity = "0.7";
+
+                // Optional: If locked, maybe show the CURRENT batting team instead of blank?
+                // The constraint says "Open: Dropdowns are blank".
+                // But locking a blank dropdown means they can't set it? 
+                // Wait, if it's locked, they CANNOT change it. 
+                // But if they save, blank sends nothing, so backend keeps value. 
+                // So "Blank + Locked" effectively means "Read-Only / No Change". 
+                // This seems correct per the "Safe Edit" goal.
             } else {
                 batSelect.disabled = false;
                 batSelect.title = "Select team to bat first";
@@ -118,7 +115,6 @@ window.submitMatchSettings = async function () {
     console.log("Starting Match Settings Update...");
 
     // 1. GET THE HIDDEN DATABASE ID (The Target)
-    // We look at the URL (e.g., index.html?match_id=15) to know WHICH match row to update.
     const urlParams = new URLSearchParams(window.location.search);
     const dbMatchId = urlParams.get('match_id');
 
@@ -127,23 +123,33 @@ window.submitMatchSettings = async function () {
         return;
     }
 
-    // 2. GET THE NEW VALUES (The Data to Save)
+    // 2. GET THE NEW VALUES
     const newMatchNo = parseInt(document.getElementById('ms-match-no').value);
     const newOvers = parseInt(document.getElementById('ms-overs').value);
     const newBallsPerOver = parseInt(document.getElementById('ms-balls-per-over').value);
     const newStatus = document.getElementById('ms-match-state').value;
-    const newTossWinner = parseInt(document.getElementById('ms-toss-winner').value);
-    const newBatFirst = document.getElementById('ms-bat-first').value; // Might be disabled, but .value still works
+
+    // Get Raw Values (might be empty strings)
+    const rawTossWinner = document.getElementById('ms-toss-winner').value;
+    const rawBatFirst = document.getElementById('ms-bat-first').value;
 
     // 3. PREPARE THE DATA PACKAGE
     const payload = {
-        match_number: newMatchNo,      // This updates the visible number (e.g. 1 -> 90)
+        match_number: newMatchNo,
         total_overs: newOvers,
         balls_per_over: newBallsPerOver,
-        match_status: newStatus,
-        toss_winner_id: newTossWinner,
-        batting_team_id: parseInt(newBatFirst)
+        match_status: newStatus
     };
+
+    // FEATURE 1 IMPLEMENTATION: Only send if not empty
+    if (rawTossWinner !== "") {
+        payload.toss_winner_id = parseInt(rawTossWinner);
+    }
+
+    // For Bat First, only send if not empty AND not disabled (redundant but safe)
+    if (rawBatFirst !== "") {
+        payload.batting_team_id = parseInt(rawBatFirst);
+    }
 
     console.log("Sending Payload to ID " + dbMatchId, payload);
 

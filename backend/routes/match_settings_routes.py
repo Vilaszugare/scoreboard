@@ -18,12 +18,12 @@ async def update_match_settings(match_id: int, settings: MatchSettingsUpdate):
         async with database.db_pool.acquire() as conn:
             # 1. Fetch Current Match State & Ball Count
             match = await conn.fetchrow("""
-                SELECT m.id, m.batting_team_id, m.current_inning, 
+                SELECT m.id, m.batting_team_id, m.current_inning, m.toss_decision,
                        COUNT(b.id) FILTER (WHERE b.extra_type IS NULL OR b.extra_type IN ('bye', 'leg-bye', 'wicket')) as valid_balls
                 FROM matches m
                 LEFT JOIN balls b ON m.id = b.match_id AND b.inning_no = m.current_inning
                 WHERE m.id = $1
-                GROUP BY m.id
+                GROUP BY m.id, m.batting_team_id, m.current_inning, m.toss_decision
             """, match_id)
 
             if not match:
@@ -43,9 +43,16 @@ async def update_match_settings(match_id: int, settings: MatchSettingsUpdate):
             # Compare toss_winner_id (from user) vs. final_batting_team_id.
             # If Same: toss_decision = 'bat'.
             # If Different: toss_decision = 'bowl'.
-            toss_decision = 'bowl'
+            
+            # 3. Auto-Calculate Decision
+            # Compare toss_winner_id (from user) vs. final_batting_team_id.
+            # If Same: toss_decision = 'bat'.
+            # If Different: toss_decision = 'bowl'.
+            
             if settings.toss_winner_id == final_batting_team_id:
                 toss_decision = 'bat'
+            else:
+                toss_decision = 'bowl'
 
             # 4. Update Database
             # We map settings.match_status -> match_type in the DB

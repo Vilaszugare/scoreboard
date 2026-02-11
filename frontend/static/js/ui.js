@@ -225,18 +225,46 @@ async function selectColor(teamId, colorCode, targetBox) {
 export function refreshUI(data) {
     if (!data || !data.innings) return;
 
-    // --- 1. Images (The Primary Cause of Shaking) ---
-    // safeUpdateImg will ONLY touch the DOM if the logo URL is new.
-    safeUpdateImg('header_batting_logo', data.batting_team_logo);
-    safeUpdateImg('header_bowling_logo', data.bowling_team_logo);
+    // --- FIX: Dynamic Team Swapping Logic ---
+    const isTeamABatting = (data.batting_team_id === data.team_a_id);
+
+    let leftName = "Batting Team";
+    let rightName = "Bowling Team";
+    let leftLogo = "";
+    let rightLogo = "";
+    let leftColor = "";
+    let rightColor = "";
+
+    if (isTeamABatting) {
+        // Normal: Team A is Batting (Left)
+        leftName = data.team_a || data.batting_team || "Team A";
+        rightName = data.team_b || data.bowling_team || "Team B";
+        leftLogo = data.team_a_logo || data.batting_team_logo;
+        rightLogo = data.team_b_logo || data.bowling_team_logo;
+        leftColor = data.team_a_color || data.batting_team_color;
+        rightColor = data.team_b_color || data.bowling_team_color;
+    } else {
+        // Swap: Team B is Batting (Left)
+        leftName = data.team_b || data.batting_team || "Team B";
+        rightName = data.team_a || data.bowling_team || "Team A";
+        leftLogo = data.team_b_logo || data.batting_team_logo;
+        rightLogo = data.team_a_logo || data.bowling_team_logo;
+        leftColor = data.team_b_color || data.batting_team_color;
+        rightColor = data.team_a_color || data.bowling_team_color;
+    }
+
+    // --- 1. Images ---
+    safeUpdateImg('header_batting_logo', leftLogo);
+    safeUpdateImg('header_bowling_logo', rightLogo);
 
     // --- 1.5 Team Colors ---
-    safeUpdateStyle('teamA_color_box', 'background', data.batting_team_color);
-    safeUpdateStyle('teamB_color_box', 'background', data.bowling_team_color);
+    // Assuming teamA_color_box is Left, teamB_color_box is Right
+    safeUpdateStyle('teamA_color_box', 'background', leftColor);
+    safeUpdateStyle('teamB_color_box', 'background', rightColor);
 
-    // --- 2. Text Content (Prevents micro-flickering) ---
-    safeUpdate('header_team_name', data.batting_team || "Batting Team");
-    safeUpdate('header_bowling_name', data.bowling_team || "Bowling Team");
+    // --- 2. Text Content ---
+    safeUpdate('header_team_name', leftName);
+    safeUpdate('header_bowling_name', rightName);
 
     // Construct Score String
     const scoreStr = `${data.innings.runs}/${data.innings.wickets}`;

@@ -4,6 +4,7 @@ from common import (
     fetch_match_state, build_match_response, fetch_player, 
     SimpleMatchRequest, NewBatsmanRequest, SquadSelectionRequest, EndMatchRequest, CreateMatchRequest
 )
+from utils.match_helpers import calculate_match_score, get_player_stats, format_timeline
 from pydantic import BaseModel
 import os
 import glob
@@ -64,6 +65,7 @@ async def fetch_full_match_state(conn, match_id: int):
                     m.current_striker_id, m.non_striker_id, m.current_bowler_id,
                     m.toss_winner_id, m.toss_decision,
                     m.team_a_id, m.team_b_id,
+                    m.batting_team_id, m.bowling_team_id,
                     m.match_number, m.match_type,
 
                     t1.name as team_a_name, t1.short_name as team_a_short, t1.logo as team_a_logo, t1.team_color as team_a_color,
@@ -77,25 +79,20 @@ async def fetch_full_match_state(conn, match_id: int):
     if not match:
         return None
 
-    # 2. Determine Teams (Batting/Bowling)
-    batting_team_id = match['team_a_id']
-    bowling_team_id = match['team_b_id']
-    
-    if match['toss_winner_id'] and match['toss_decision']:
-        winner = match['toss_winner_id']
-        loser = match['team_b_id'] if winner == match['team_a_id'] else match['team_a_id']
+    # 2. Convert to Dict for modification
+    match_dict = dict(match)
 
-        if match['toss_decision'] == 'bat':
-            first_bat, first_bowl = winner, loser
-        else:
-            first_bat, first_bowl = loser, winner
-        
-        if match.get('current_inning', 1) == 2:
-            batting_team_id, bowling_team_id = first_bowl, first_bat
-        else:
-            batting_team_id, bowling_team_id = first_bat, first_bowl
+    # 3. Determine Teams (Use DB Source of Truth)
+    batting_team_id = match['batting_team_id']
+    bowling_team_id = match['bowling_team_id']
+    
+    # Fallback if null (shouldn't happen in valid active matches)
+    if not batting_team_id:
+         batting_team_id = match['team_a_id']
+         bowling_team_id = match['team_b_id']
     
     # Map Names & Logos & Colors
+    # We check against team_a_id to see which team struct to use
     if batting_team_id == match['team_a_id']:
         bat_name, bat_logo, bat_color = match['team_a_name'], match['team_a_logo'], match['team_a_color']
         bowl_name, bowl_logo, bowl_color = match['team_b_name'], match['team_b_logo'], match['team_b_color']
@@ -104,153 +101,103 @@ async def fetch_full_match_state(conn, match_id: int):
         bowl_name, bowl_logo, bowl_color = match['team_a_name'], match['team_a_logo'], match['team_a_color']
 
     # --- LOGO FALLBACK LOGIC ---
-    # If the database doesn't have a logo URL, look for it in the filesystem
     if not bat_logo:
         bat_logo = find_logo_for_team(batting_team_id)
     if not bowl_logo:
         bowl_logo = find_logo_for_team(bowling_team_id)
 
-    # 3. Calculate Score
+    # ======================================================
+    # NEW: FETCH ALL DATA IN BULK (Optimization)
+    # ======================================================
+    
+    # A. Fetch All Balls
+    balls_rows = await conn.fetch("SELECT * FROM balls WHERE match_id = $1 ORDER BY id", match_id)
+    all_balls = [dict(b) for b in balls_rows]
+    
+    # B. Fetch Adjustments
     current_inn = match.get('current_inning', 1)
+    adj_row = await conn.fetchrow("SELECT * FROM score_adjustments WHERE match_id = $1 AND inning_no = $2", match_id, current_inn)
+    adjustments = dict(adj_row) if adj_row else None
+
+    # ======================================================
+    # CALL HELPER FUNCTIONS (Pure Python Logic)
+    # ======================================================
     
-    stats = await conn.fetchrow("""
-        SELECT 
-            COALESCE(SUM(runs_off_bat + extras), 0) as total_runs,
-            COUNT(CASE WHEN is_wicket = TRUE THEN 1 END) as total_wickets,
-            COUNT(CASE WHEN extra_type IS NULL OR extra_type IN ('bye', 'leg-bye', 'wicket') THEN 1 END) as valid_balls
-        FROM balls 
-        WHERE match_id = $1 AND inning_no = $2
-    """, match_id, current_inn)
+    score_data = calculate_match_score(all_balls, match_dict, adjustments)
+    player_data = get_player_stats(all_balls, match_dict)
+    timeline = format_timeline(all_balls, current_inn)
 
-    # --- NEW: Fetch Manual Adjustments ---
-    adj = await conn.fetchrow("""
-        SELECT runs_adjustment, wickets_adjustment, balls_adjustment 
-        FROM score_adjustments 
-        WHERE match_id = $1 AND inning_no = $2
-    """, match_id, current_inn)
+    # ======================================================
+    # RECONSTRUCT RESPONSE
+    # ======================================================
     
-    adj_runs = adj['runs_adjustment'] if adj else 0
-    adj_wickets = adj['wickets_adjustment'] if adj else 0
-    adj_balls = adj['balls_adjustment'] if adj else 0
-
-    # Apply to Current Inning Stats
-    runs = (stats['total_runs'] or 0) + adj_runs
-    wickets = (stats['total_wickets'] or 0) + adj_wickets
-    balls = (stats['valid_balls'] or 0) + adj_balls
+    # 1. Batsmen Stats (From Helper)
+    batsmen = []
     
-    # Safety: Ensure no negative numbers
-    runs = max(0, runs)
-    wickets = max(0, wickets)
-    balls = max(0, balls)
+    striker_id = match['current_striker_id']
+    non_striker_id = match['non_striker_id']
     
-    overs_float = balls / 6.0
-    
-    crr = 0.0
-    if balls > 0:
-        crr = round(runs / overs_float, 2)
-
-    total_overs_match = match.get('total_overs', 20)
-    projected = int(crr * total_overs_match) if crr > 0 else 0
-
-    # 4. Recent Balls (This Over)
-    recent = await conn.fetch("""
-        SELECT runs_off_bat, extras, extra_type, is_wicket 
-        FROM balls 
-        WHERE match_id = $1 AND inning_no = $2 
-        ORDER BY id DESC LIMIT 18
-    """, match_id, current_inn)
-
-    this_over_runs = 0
-    this_over_balls = [] # New List for UI
-    
-    balls_in_this_over = balls % 6
-    if balls_in_this_over == 0 and balls > 0:
-        balls_in_this_over = 6
-    elif balls == 0:
-        balls_in_this_over = 0
-
-    valid_cnt = 0
-    if balls_in_this_over > 0:
-        for b in recent:
-            this_over_runs += (b['runs_off_bat'] + b['extras'])
-            
-            # Build Ball Object
-            ball_obj = {
-                "runs": b['runs_off_bat'],
-                "extras": b['extras'],
-                "extra_type": b['extra_type'],
-                "is_wicket": b['is_wicket']
-            }
-            this_over_balls.append(ball_obj)
-            
-            is_valid = True
-            if b['extra_type'] in ('wide', 'no-ball'):
-                is_valid = False
-            
-            if is_valid:
-                valid_cnt += 1
-            
-            if valid_cnt >= balls_in_this_over:
-                break
-    
-    # Reverse to show chronological order (1st ball -> Last ball)
-    this_over_balls.reverse()
-
-
-    # --- NEW: PREVIOUS INNING STATS & TARGET CORRECTION (For 2nd Inning) ---
-    prev_inning_data = None
-    calculated_target = match['target_score']
-
-    if current_inn == 2:
-        # Fetch Real Stats
-        prev_stats = await conn.fetchrow("""
-            SELECT 
-                COALESCE(SUM(runs_off_bat + extras), 0) as total_runs,
-                COUNT(CASE WHEN is_wicket = TRUE THEN 1 END) as total_wickets,
-                COUNT(CASE WHEN extra_type IS NULL OR extra_type IN ('bye', 'leg-bye', 'wicket') THEN 1 END) as valid_balls
-            FROM balls 
-            WHERE match_id = $1 AND inning_no = 1
-        """, match_id)
+    # Helper to fetch player details (could be optimized with bulk fetch, but keeping simple for now)
+    async def get_details(pid, on_strike):
+        if not pid: return None
+        p_row = await conn.fetchrow("SELECT id, name, photo_url FROM players WHERE id=$1", pid)
+        if not p_row: return None
         
-        # Fetch Adjustments for Inning 1
-        adj_inn1 = await conn.fetchrow("""
-            SELECT runs_adjustment, wickets_adjustment, balls_adjustment 
-            FROM score_adjustments 
-            WHERE match_id = $1 AND inning_no = 1
-        """, match_id)
+        # Get stats from our computed dict
+        p_stats = player_data['batting'].get(pid, {'runs': 0, 'balls': 0, 'fours': 0, 'sixes': 0})
         
-        inn1_adj_runs = adj_inn1['runs_adjustment'] if adj_inn1 else 0
-        inn1_adj_wickets = adj_inn1['wickets_adjustment'] if adj_inn1 else 0
-        inn1_adj_balls = adj_inn1['balls_adjustment'] if adj_inn1 else 0
-
-        # Calculate Final Stats for Inning 1
-        raw_runs = prev_stats['total_runs'] if prev_stats else 0
-        raw_wkts = prev_stats['total_wickets'] if prev_stats else 0
-        raw_balls = prev_stats['valid_balls'] if prev_stats else 0
-
-        p_runs = raw_runs + inn1_adj_runs
-        p_wkts = raw_wkts + inn1_adj_wickets
-        p_balls = raw_balls + inn1_adj_balls
-        
-        # Safety
-        p_runs = max(0, p_runs)
-        p_wkts = max(0, p_wkts)
-        p_balls = max(0, p_balls)
-
-        p_overs = f"{p_balls // 6}.{p_balls % 6}"
-        prev_inning_data = {
-            "runs": p_runs,
-            "wickets": p_wkts,
-            "overs": p_overs
+        # Calculate SR
+        sr = 0.0
+        if p_stats['balls'] > 0:
+            sr = round((p_stats['runs'] / p_stats['balls']) * 100, 2)
+            
+        return {
+            "id": p_row['id'], "name": p_row['name'], "photo_url": p_row['photo_url'],
+            "runs": p_stats['runs'], "balls": p_stats['balls'], 
+            "fours": p_stats['fours'], "sixes": p_stats['sixes'], 
+            "on_strike": on_strike,
+            "sr": sr
         }
 
-        # RE-CALCULATE TARGET
-        calculated_target = p_runs + 1
+    if striker_id:
+        b = await get_details(striker_id, True)
+        if b: batsmen.append(b)
+    if non_striker_id:
+        b = await get_details(non_striker_id, False)
+        if b: batsmen.append(b)
 
-    # --- NEW: LAST OUT LOGIC ---
-    last_out_data = None
+    # 2. Bowler Stats (From Helper)
+    current_bowler_id = match['current_bowler_id']
+    bowler_obj = None
     
-    # Corrected Query: Join with wickets table to get player_out and wicket_type
+    if current_bowler_id:
+        b_row = await conn.fetchrow("SELECT id, name, photo_url FROM players WHERE id=$1", current_bowler_id)
+        if b_row:
+             stats = player_data['bowling'].get(current_bowler_id, 
+                        {'runs_conceded':0, 'wickets':0, 'dots':0, 'extras':0, 'legal_balls':0})
+             
+             lb = stats.get('legal_balls', 0)
+             b_overs = f"{lb // 6}.{lb % 6}"
+             
+             econ = 0.0
+             if lb > 0:
+                 econ = round(stats['runs_conceded'] / (lb/6.0), 2)
+                 
+             bowler_obj = {
+                 "id": b_row['id'], "name": b_row['name'], "photo_url": b_row['photo_url'],
+                 "runs_conceded": stats['runs_conceded'],
+                 "wickets": stats['wickets'],
+                 "dots": stats['dots'],
+                 "econ": econ,
+                 "extras": stats['extras'],
+                 "overs": b_overs,
+                 "maidens": 0 # Still TODO
+             }
+
+    # 3. Last Out / Partnership (Keep existing SQL for now as it involves complex joins)
+    # Note: We could move this to helper too, but it requires Player Name Joins.
+    # For safety, I'll keep the specific SQL for "Last Out" as it's just one query.
+    
     last_wicket_row = await conn.fetchrow("""
         SELECT 
             w.player_out_id, w.wicket_type,
@@ -264,160 +211,87 @@ async def fetch_full_match_state(conn, match_id: int):
         ORDER BY b.id DESC
         LIMIT 1
     """, match_id, current_inn)
-
+    
+    last_out_data = None
     if last_wicket_row:
-        # Fetch detailed stats for the batsman who got out
-        batsman_stats = await conn.fetchrow("""
-             SELECT runs, balls, fours, sixes 
-             FROM players 
-             WHERE id = $1
-        """, last_wicket_row['player_out_id'])
+        # We can get the runs/balls from our player_data dict! No need for extra SQL!
+        pid = last_wicket_row['player_out_id']
+        p_stats = player_data['batting'].get(pid, {'runs':0, 'balls':0, 'fours':0, 'sixes':0})
         
-        if batsman_stats:
-            b_name = last_wicket_row['batter_name']
-            bo_name = last_wicket_row['bowler_name']
-            w_type = last_wicket_row['wicket_type'] or "out"
-            w_type = w_type.lower()
-            
-            # Formatting dismissal text
-            dismissal_text = f"b {bo_name}"
-            if "run out" in w_type or "runout" in w_type:
-                dismissal_text = "Run Out" 
-            elif "lbw" in w_type:
-                dismissal_text = f"lbw b {bo_name}"
-            elif "caught" in w_type or "catch" in w_type:
-                dismissal_text = f"c (Fielder) b {bo_name}" # Placeholder for fielder
-            elif "stumped" in w_type:
-                dismissal_text = f"st b {bo_name}"
-                
-            last_out_data = {
-                "batter_name": b_name,
-                "dismissal": dismissal_text,
-                "runs": batsman_stats['runs'],
-                "balls": batsman_stats['balls'],
-                "fours": batsman_stats['fours'],
-                "sixes": batsman_stats['sixes']
-            }
-
-
-
-    # Resolve Toss Winner Name
-    toss_winner_name = None
-    if match['toss_winner_id']:
-        if match['toss_winner_id'] == match['team_a_id']:
-            toss_winner_name = match['team_a_name']
-        elif match['toss_winner_id'] == match['team_b_id']:
-            toss_winner_name = match['team_b_name']
-
-    # --- NEW: Calculate Current Partnership ---
-    # 1. Find the ID of the last ball where a wicket fell
-    last_wkt_id = await conn.fetchval("""
-        SELECT MAX(id) FROM balls
-        WHERE match_id = $1 AND inning_no = $2 AND is_wicket = TRUE
-    """, match_id, current_inn)
-
-    # If no wickets, start from ID 0 (beginning of inning)
-    start_id = last_wkt_id if last_wkt_id else 0
-
-    # 2. Sum runs and count balls AFTER the last wicket
-    part_stats = await conn.fetchrow("""
-        SELECT 
-            COALESCE(SUM(runs_off_bat + extras), 0) as runs,
-            COUNT(CASE WHEN extra_type IS NULL OR extra_type IN ('bye', 'leg-bye', 'wicket') THEN 1 END) as valid_balls
-        FROM balls 
-        WHERE match_id = $1 AND inning_no = $2 AND id > $3
-    """, match_id, current_inn, start_id)
-
-    current_partnership = {
-        "runs": part_stats['runs'],
-        "balls": part_stats['valid_balls']
-    }
-
-    # 5. Current Batsmen
-    batsmen = []
-    
-    striker_id = match['current_striker_id']
-    non_striker_id = match['non_striker_id']
-    
-    async def get_match_player_stats(p_id):
-        if not p_id: return None
-        # Fetch basic details
-        p = await conn.fetchrow("SELECT id, name, photo_url FROM players WHERE id=$1", p_id)
-        if not p: return None
+        w_type = (last_wicket_row['wicket_type'] or "out").lower()
+        bo_name = last_wicket_row['bowler_name']
         
-        # Calculate Match Stats
-        stats = await conn.fetchrow("""
-            SELECT 
-                COALESCE(SUM(runs_off_bat), 0) as runs,
-                COUNT(*) FILTER (WHERE extra_type IS DISTINCT FROM 'wide') as balls,
-                COUNT(*) FILTER (WHERE runs_off_bat = 4) as fours,
-                COUNT(*) FILTER (WHERE runs_off_bat = 6) as sixes
-            FROM balls
-            WHERE match_id = $1 AND striker_id = $2
-        """, match_id, p_id)
+        dismissal_text = f"b {bo_name}"
+        if "run out" in w_type or "runout" in w_type: dismissal_text = "Run Out"
+        elif "lbw" in w_type: dismissal_text = f"lbw b {bo_name}"
+        elif "caught" in w_type: dismissal_text = f"c (Fielder) b {bo_name}"
+        elif "stumped" in w_type: dismissal_text = f"st b {bo_name}"
         
-        return {
-            "id": p['id'], "name": p['name'], "photo_url": p['photo_url'],
-            "runs": stats['runs'], "balls_faced": stats['balls'], 
-            "fours": stats['fours'], "sixes": stats['sixes']
+        last_out_data = {
+            "batter_name": last_wicket_row['batter_name'],
+            "dismissal": dismissal_text,
+            "runs": p_stats['runs'],
+            "balls": p_stats['balls'],
+            "fours": p_stats['fours'],
+            "sixes": p_stats['sixes']
         }
 
-    if striker_id:
-        s_stats = await get_match_player_stats(striker_id)
-        if s_stats:
-             s_stats["on_strike"] = True
-             batsmen.append(s_stats)
+    # 4. Previous Inning Data (Calculated via Wrapper?)
+    # If inning 2, we need inning 1 score.
+    prev_inning_data = None
+    calculated_target = match['target_score']
     
-    if non_striker_id:
-        ns_stats = await get_match_player_stats(non_striker_id)
-        if ns_stats:
-             ns_stats["on_strike"] = False
-             batsmen.append(ns_stats)
+    if current_inn == 2:
+        # We can re-use calculate_match_score but need adjustments for inning 1
+        adj_inn1_row = await conn.fetchrow("SELECT * FROM score_adjustments WHERE match_id = $1 AND inning_no = 1", match_id)
+        adj_inn1 = dict(adj_inn1_row) if adj_inn1_row else None
+        
+        # Hack: Mutate match object temporarily or pass inning explicitly to helper?
+        # Helper takes all balls and checks match_info['current_inning'].
+        # Let's create a temp match dict.
+        temp_match = match_dict.copy()
+        temp_match['current_inning'] = 1
+        
+        inn1_score = calculate_match_score(all_balls, temp_match, adj_inn1)
+        prev_inning_data = {
+            "runs": inn1_score['runs'],
+            "wickets": inn1_score['wickets'],
+            "overs": inn1_score['overs']
+        }
+        calculated_target = inn1_score['runs'] + 1
 
-    # 6. Current Bowler
-    bowler = None
-    b_overs = 0.0
-    
-    current_bowler_id = match.get('current_bowler_id')
-    if current_bowler_id:
-        b = await conn.fetchrow("SELECT * FROM players WHERE id=$1", current_bowler_id)
-        if b:
-             stats = await conn.fetchrow("""
-                SELECT 
-                    SUM(runs_off_bat + extras) as runs_conceded, 
-                    COUNT(*) FILTER (WHERE is_wicket = TRUE) as wickets,
-                    COUNT(*) FILTER (WHERE extra_type IS NULL OR extra_type IN ('bye', 'leg-bye', 'wicket')) as legal_balls,
-                    COUNT(*) FILTER (WHERE runs_off_bat = 0 AND (extras = 0 OR extra_type NOT IN ('wide', 'noball'))) as dots,
-                    COUNT(*) FILTER (WHERE extra_type IN ('wide', 'no-ball', 'noball')) as bowler_extras
-                FROM balls
-                WHERE bowler_id = $1 AND match_id = $2
-            """, b['id'], match_id)
+    # 5. Current Partnership (Python Logic)
+    # Filter balls for current partnership
+    # Last wicket ID?
+    last_wkt_ball = None
+    # Reverse search for wicket
+    for b in reversed(all_balls):
+        if b['match_id'] == match_id and b['inning_no'] == current_inn and b['is_wicket']:
+            last_wkt_ball = b
+            break
             
-             rc = stats['runs_conceded'] or 0
-             wk = stats['wickets'] or 0
-             lb = stats['legal_balls'] or 0
-             dots = stats['dots'] or 0
-             extras = stats['bowler_extras'] or 0
-             
-             b_overs = f"{lb // 6}.{lb % 6}"
-             
-             # Calculate Economy
-             econ = 0.0
-             if lb > 0:
-                 overs_val = lb / 6.0
-                 econ = round(rc / overs_val, 2)
+    start_id = last_wkt_ball['id'] if last_wkt_ball else 0
+    
+    part_runs = 0
+    part_balls = 0
+    
+    for b in all_balls:
+        if b['match_id'] == match_id and b['inning_no'] == current_inn and b['id'] > start_id:
+            part_runs += (b['runs_off_bat'] or 0) + (b['extras'] or 0)
+            et = b.get('extra_type')
+            if et not in ('wide', 'no-ball', 'noball'):
+                part_balls += 1
+                
+    current_partnership = { "runs": part_runs, "balls": part_balls }
 
-             bowler = {
-                 "id": b['id'], "name": b['name'], "photo_url": b['photo_url'],
-                 "runs_conceded": rc,
-                 "wickets": wk,
-                 "dots": dots,
-                 "econ": econ,
-                 "extras": extras,
-                 "overs": b_overs,
-                 "maidens": 0 # TODO: Implement maiden calculation
-             }
+    # --- TOSS WINNER NAME ---
+    toss_winner_name = None
+    if match['toss_winner_id'] == match['team_a_id']:
+        toss_winner_name = match['team_a_name']
+    elif match['toss_winner_id'] == match['team_b_id']:
+        toss_winner_name = match['team_b_name']
 
+    # RETURN FINAL JSON
     return {
         "match_id": match_id,
         "match_number": match['match_number'],
@@ -433,39 +307,37 @@ async def fetch_full_match_state(conn, match_id: int):
         "bowling_team_color": bowl_color,
         "batting_team_id": batting_team_id,
         "bowling_team_id": bowling_team_id,
-        "this_over_runs": this_over_runs,
-        "this_over_balls": this_over_balls,
-        "crr": crr,
-        "projected_score": projected,
+
+        "team_a_id": match['team_a_id'],
+        "team_b_id": match['team_b_id'],
+        "team_a": match['team_a_name'],
+        "team_b": match['team_b_name'],
+        "team_a_logo": match['team_a_logo'],
+        "team_b_logo": match['team_b_logo'],
+        "team_a_color": match['team_a_color'],
+        "team_b_color": match['team_b_color'],
+        
+        # Timeline
+        "this_over_balls": timeline,
+        "this_over_runs": sum(t['runs'] + t['extras'] for t in timeline if True),
+        
+        "crr": score_data['crr'],
+        "projected_score": score_data['projected_score'],
         "toss_winner": match['toss_winner_id'],
         "toss_winner_name": toss_winner_name,
         "toss_decision": match['toss_decision'],
         "current_partnership": current_partnership,
         "innings": {
-            "runs": runs,
-            "wickets": wickets,
-            "overs": f"{balls // 6}.{balls % 6}",
+            "runs": score_data['runs'],
+            "wickets": score_data['wickets'],
+            "overs": score_data['overs'],
             "current_inning": current_inn,
             "target": calculated_target
         },
         "last_out": last_out_data,
-
         "previous_inning": prev_inning_data,
-        "current_batsmen": [
-            {
-                "id": b['id'], "name": b['name'], "photo_url": b['photo_url'],
-                "runs": b['runs'], 
-                "balls": b['balls_faced'], "fours": b['fours'], 
-                "sixes": b['sixes'], "on_strike": b['on_strike'],
-                "sr": round((b['runs'] / b['balls_faced'] * 100), 2) if b['balls_faced'] > 0 else 0.0
-            } for b in batsmen
-        ],
-        "current_bowler": {
-            "id": bowler['id'], "name": bowler['name'], "photo_url": bowler['photo_url'],
-            "overs": bowler['overs'], "runs_conceded": bowler['runs_conceded'],
-            "wickets": bowler['wickets'], "dots": bowler['dots'],
-            "econ": bowler['econ'], "extras": bowler['extras'], "maidens": bowler['maidens']
-        } if bowler else None
+        "current_batsmen": batsmen,
+        "current_bowler": bowler_obj
     }
 
 @router.get("/matches/{match_id}/scorecard")
@@ -607,6 +479,22 @@ async def get_match_scorecard(match_id: int):
             "inning2": process_inning(2)
         }
 
+
+@router.get("/matches")
+async def get_matches(tournament_id: int):
+    async with database.db_pool.acquire() as conn:
+        matches = await conn.fetch("""
+            SELECT 
+                m.*, 
+                ROW_NUMBER() OVER (PARTITION BY m.tournament_id ORDER BY m.id ASC) as visual_number
+            FROM matches m
+            WHERE m.tournament_id = $1
+            ORDER BY m.id DESC
+        """, tournament_id)
+        
+        # Convert to dictionary (Record objects needed serialization)
+        return [dict(m) for m in matches]
+
 @router.get("/match_data")
 async def get_match_data(match_id: int):
     async with database.db_pool.acquire() as conn:
@@ -665,6 +553,10 @@ async def set_batsman(match_id: int, payload: NewBatsmanRequest):
             
             # 3. Mark player as 'is_batted' (optional but good practice)
             await conn.execute("UPDATE players SET is_batted = TRUE WHERE id = $1", payload.new_player_id)
+            
+            # --- NEW: LOG EVENT FOR UNDO ---
+            await conn.execute("INSERT INTO match_events (match_id, event_type, event_id) VALUES ($1, 'NEW_BATTER', $2)", match_id, payload.new_player_id)
+            # -------------------------------
             
             return await fetch_full_match_state(conn, match_id)
             
@@ -806,6 +698,10 @@ async def set_bowler(match_id: int, payload: SetBowlerRequest):
             SET current_bowler_id = $1 
             WHERE id = $2
         """, payload.player_id, match_id)
+        
+        # --- NEW: LOG EVENT FOR UNDO ---
+        await conn.execute("INSERT INTO match_events (match_id, event_type, event_id) VALUES ($1, 'NEW_BOWLER', $2)", match_id, payload.new_player_id)
+        # -------------------------------
         
         return await fetch_full_match_state(conn, match_id)
 
