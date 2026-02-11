@@ -124,7 +124,18 @@ window.squadCache = {
     // Helper to post data
     async function updateScore(action, value = null, extraData = {}) {
         try {
-            const payload = { match_id: MATCH_ID, action, value, ...extraData };
+            // CRITICAL: Send points to the Batting Team ID from the database, NOT hardcoded Team A
+            // Use window.currentMatchData to get the authoritative batting team ID
+            const match = window.currentMatchData || {};
+            const battingTeamId = match.current_batting_team_id || match.batting_team_id;
+
+            const payload = { 
+                match_id: MATCH_ID, 
+                team_id: battingTeamId, // Dynamic Team ID
+                action, 
+                value, 
+                ...extraData 
+            };
             console.log('Sending Payload:', payload);
 
             const response = await fetch(`${API_URL}/update_score`, {
@@ -231,23 +242,45 @@ window.squadCache = {
         // --- TEAM DISPLAY LOGIC (FIXED) ---
         // Goal: Batting Team always on Left, Bowling Team on Right.
 
-        let leftName, rightName, leftLogo, rightLogo;
+        // --- TEAM DISPLAY LOGIC (STRICT: BATTING LEFT, BOWLING RIGHT) ---
+        let battingTeamObj, bowlingTeamObj;
+        let isTeamABatting = true; // Flag for score logic if needed
 
-        // Check if Team B is Batting (Explicit Check)
-        // If Team B is batting, we SWAP (B on Left, A on Right)
-        if (data.batting_team_id === data.team_b_id) {
-            // Team B is Batting (Left)
-            leftName = data.team_b || data.batting_team || "Team B";
-            rightName = data.team_a || data.bowling_team || "Team A";
-            leftLogo = data.team_b_logo || data.batting_team_logo;
-            rightLogo = data.team_a_logo || data.bowling_team_logo;
+        // 1. Determine Batting & Bowling Teams based on Backend Truth
+        // data.current_batting_team_id should be the source of truth
+        if (data.current_batting_team_id && data.current_batting_team_id === data.team_b_id) {
+            // Team B is Batting -> Put B on LEFT
+            battingTeamObj = {
+                name: data.team_b || "Team B",
+                logo: data.team_b_logo
+            };
+            bowlingTeamObj = {
+                name: data.team_a || "Team A",
+                logo: data.team_a_logo
+            };
+            isTeamABatting = false;
         } else {
-            // Team A is Batting OR Default (Left)
-            leftName = data.team_a || data.batting_team || "Team A";
-            rightName = data.team_b || data.bowling_team || "Team B";
-            leftLogo = data.team_a_logo || data.batting_team_logo;
-            rightLogo = data.team_b_logo || data.bowling_team_logo;
+            // Team A is Batting -> Put A on LEFT
+            battingTeamObj = {
+                name: data.team_a || "Team A",
+                logo: data.team_a_logo
+            };
+            bowlingTeamObj = {
+                name: data.team_b || "Team B",
+                logo: data.team_b_logo
+            };
+            isTeamABatting = true;
         }
+
+        // 2. Render Left Side (ALWAYS BATTING)
+        // Note: The ID 'header_batting_logo'/name implies it's the Batting slot in the DOM
+        // BUT the prompt says "Batting Team is ALWAYS on the Left."
+        // We assume 'header_team_name' is the Left element and 'header_bowling_name' is the Right element based on existing code structure.
+
+        const leftName = battingTeamObj.name;
+        const rightName = bowlingTeamObj.name;
+        const leftLogo = battingTeamObj.logo;
+        const rightLogo = bowlingTeamObj.logo;
 
         // Apply Names
         const teamNameEl = document.getElementById('header_team_name');
